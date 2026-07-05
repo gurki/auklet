@@ -1,0 +1,15 @@
+diff --git a/dist/index.js b/dist/index.js
+index 458febae1c6742bf7c4d0dc11526676fa492a910..a0ba373eb955655efab1fe7016f9d5632970cd8b 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5852,8 +5852,8 @@ var audibleRawItemSchema = exports_external.object({
+   subtitle: optionalString,
+   isbn: optionalString,
+   sku: optionalString,
+-  authors: exports_external.array(exports_external.object({ name: exports_external.string() })).default([]),
+-  narrators: exports_external.array(exports_external.object({ name: exports_external.string() })).default([]),
++  authors: exports_external.array(exports_external.object({ name: exports_external.string() })).catch([]),
++  narrators: exports_external.array(exports_external.object({ name: exports_external.string() })).catch([]),
+   runtime_length_min: exports_external.number().nonnegative().default(0),
+   publisher_name: optionalString,
+   language: optionalString,
