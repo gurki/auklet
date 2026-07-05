@@ -1,0 +1,23 @@
+{
+  "name": "auklet",
+  "version": "0.1.0",
+  "description": "an audible watchdog and local database for audiobook library changes and listening progress",
+  "main": "index.js",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "auklet": "./cli.js"
+  },
+  "scripts": {
+    "dev": "bun --watch index.js",
+    "start": "bun index.js",
+    "login": "bun cli.js login",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "audible-api-ts": "^0.2.0",
+    "chalk": "^5.2.0",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,15 @@
+services:
+  auklet:
+    build: .
+    container_name: auklet
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PORT:-8899}:${PORT:-8899}"
+    volumes:
+      - ./db:/usr/src/auklet/db
+    healthcheck:
+      test: ["CMD", "bun", "-e", "await fetch('http://127.0.0.1:' + (process.env.PORT || 8899) + '/healthz').then(r => { if (!r.ok) throw 1 })"]
+      interval: 60s
+      timeout: 5s
+      retries: 3

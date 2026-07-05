@@ -1,0 +1,20 @@
+# Alternative to Docker Compose: run auklet directly under systemd with bun
+# installed on the host. Install:
+#   sudo cp deploy/auklet.service /etc/systemd/system/
+#   sudo systemctl enable --now auklet
+# (authenticate first: cd /srv/auklet && bun cli.js login)
+[Unit]
+Description=auklet - audible watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/auklet
+ExecStart=/usr/local/bin/bun index.js
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/srv/auklet/.env
+
+[Install]
+WantedBy=multi-user.target
