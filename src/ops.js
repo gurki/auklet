@@ -1,4 +1,4 @@
-import { syncLibrary, syncWishlist } from "./sync.js"
+import { syncLibrary, syncWishlist, syncStats } from "./sync.js"
 import { deriveSessions } from "./sessions.js"
 
 // The daemon is the single executor: one op at a time, watcher-triggered
@@ -39,7 +39,7 @@ export function jobProgress(id, progress) {
 
 // Full refresh of library / wishlist from the source of truth. Same code as
 // the periodic poll, so it doubles as "rebuild current state from the API".
-export { syncLibrary, syncWishlist, deriveSessions }
+export { syncLibrary, syncWishlist, syncStats, deriveSessions }
 
 export async function verify(flags = {}) {
     const { verify: impl } = await import("./verify.js")

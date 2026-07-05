@@ -29,7 +29,9 @@ export function deriveSessions({ rebuild = false, now = null } = {}) {
     const nowMs = Date.parse(nowIso)
 
     if (rebuild) {
-        db.exec("DELETE FROM sessions")
+        // only inferred sessions are ours to recompute; exact finish markers
+        // (back-dated from Audible stats) must survive a rebuild.
+        db.exec("DELETE FROM sessions WHERE confidence = 'inferred'")
         setSyncState("journey_cursor_sessions", 0)
     }
 
@@ -102,4 +104,29 @@ export function deriveSessions({ rebuild = false, now = null } = {}) {
     })()
 
     return { created }
+}
+
+// A completion marker back-dated from Audible's finished-status history. Stored
+// as an exact, finished listen so it appears in history and syncs like any
+// other listen. confidence='exact' means deriveSessions({rebuild}) won't wipe it.
+export function recordFinishSession(asin, finishedAt, durationSec) {
+    const db = getDb()
+    const nk = listenKey(finishedAt, asin)
+    const res = db.prepare(`
+        INSERT OR IGNORE INTO sessions (
+            id, natural_key, book_asin, started_at, ended_at,
+            position_start_sec, position_end_sec, listened_sec,
+            month, local_time, tz, finished, confidence
+        ) VALUES (@id, @nk, @asin, @ts, @ts, NULL, @pos, NULL, @month, @lt, @tz, 1, 'exact')
+    `).run({
+        id: deterministicUlid(finishedAt, nk),
+        nk,
+        asin,
+        ts: finishedAt,
+        pos: durationSec ?? null,
+        month: localMonth(finishedAt),
+        lt: localTime(finishedAt),
+        tz: TIME_ZONE,
+    })
+    return res.changes > 0
 }

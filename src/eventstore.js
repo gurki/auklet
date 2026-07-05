@@ -56,6 +56,14 @@ function prepare() {
             INSERT INTO progress_snapshots (book_asin, observed_at, percent_complete, position_sec, delta_sec, is_finished)
             VALUES (@book_asin, @observed_at, @percent_complete, @position_sec, @delta_sec, @is_finished)
         `),
+
+        upsertStat: db.prepare(`
+            INSERT INTO listening_stats (kind, period, seconds, updated_at)
+            VALUES (@kind, @period, @seconds, datetime('now'))
+            ON CONFLICT(kind, period) DO UPDATE SET seconds = excluded.seconds, updated_at = excluded.updated_at
+        `),
+
+        setFinished: db.prepare("UPDATE books SET finished_at = @finished_at, is_finished = 1 WHERE asin = @asin"),
     }
 
     return statements
@@ -160,4 +168,14 @@ export function setSyncState(key, value) {
         INSERT INTO sync_state (key, value, updated_at) VALUES (?, ?, datetime('now'))
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `).run(key, String(value))
+}
+
+// --- historical backfill (Audible stats endpoints) --------------------------
+
+export function upsertListeningStat(kind, period, seconds) {
+    prepare().upsertStat.run({ kind, period, seconds })
+}
+
+export function setBookFinished(asin, finishedAt) {
+    prepare().setFinished.run({ asin, finished_at: finishedAt })
 }

@@ -1,6 +1,10 @@
-import { library, wishlist } from "audible-api-ts"
+import { createSign } from "node:crypto"
+
+import { library, wishlist, refresh, AUDIBLE_LOCALES } from "audible-api-ts"
 
 import { loadCredentials, saveCredentials } from "../auth.js"
+
+const REFRESH_BUFFER_MS = 5 * 60 * 1000
 
 // Thin wrapper over audible-api-ts. Normalizes an AudibleItem into the stable
 // fields auklet stores, and derives a best-effort listening position:
@@ -77,4 +81,95 @@ export async function fetchWishlist() {
     const { items, credentials } = await wishlist(creds)
     await saveCredentials(credentials)
     return items.map(normalizeItem)
+}
+
+// --- signed raw requests -----------------------------------------------------
+// audible-api-ts doesn't wrap the /1.0/stats/* endpoints, so we replicate its
+// request signing (x-adp-token + RSA-SHA256 over method\npath\ndate\nbody\n
+// adpToken) to reach them - the only source of *historical* listening data
+// (the library API gives current position only). Reuses the library's refresh
+// + locale config.
+
+function signHeaders(method, path, body, creds) {
+    const date = new Date().toISOString().replace(/\.\d{3}Z$/, "Z")
+    const data = `${method}\n${path}\n${date}\n${body}\n${creds.adpToken}`
+    const signer = createSign("SHA256")
+    signer.update(data)
+    const signature = signer.sign(creds.devicePrivateKey, "base64")
+    return { "x-adp-token": creds.adpToken, "x-adp-alg": "SHA256withRSA:1.0", "x-adp-signature": `${signature}:${date}` }
+}
+
+async function apiGet(path, query) {
+    let creds = await loadCredentials()
+    if (creds.expiresAt.getTime() - Date.now() < REFRESH_BUFFER_MS) {
+        creds = await refresh(creds)
+        await saveCredentials(creds)
+    }
+    const domain = AUDIBLE_LOCALES[creds.locale].domain
+    const qs = query
+        ? "?" + Object.entries(query).filter(([, v]) => v != null).map(([k, v]) => `${k}=${v}`).join("&")
+        : ""
+    const full = `/1.0${path}${qs}`
+    const res = await fetch(`https://api.audible.${domain}${full}`, { headers: signHeaders("GET", full, "", creds) })
+    if (!res.ok) throw new Error(`audible api ${res.status} ${res.statusText} (${path})`)
+    return res.json()
+}
+
+const ymd = (d) => d.toISOString().slice(0, 10)
+const ym = (d) => d.toISOString().slice(0, 7)
+
+// All historical "marked as finished" events -> Map<asin, latest finishedAt ISO>,
+// paginating the continuation_token back to the start of the account.
+export async function fetchFinished() {
+    const byAsin = new Map()
+    let token = null
+    for (let page = 0; page < 200; page++) {
+        const data = await apiGet("/stats/status/finished", {
+            start_date: "2000-01-01T00:00:00Z",
+            continuation_token: token,
+        })
+        const list = data.mark_as_finished_status_list ?? []
+        for (const e of list) {
+            if (e.is_marked_as_finished && e.asin && e.event_timestamp) {
+                const prev = byAsin.get(e.asin)
+                if (!prev || e.event_timestamp > prev) byAsin.set(e.asin, e.event_timestamp)
+            }
+        }
+        token = data.continuation_token
+        if (!token || list.length === 0) break
+    }
+    return byAsin
+}
+
+// Historical listening time (seconds): monthly totals back to account start
+// (12-month windows, stop after two empty windows) plus recent daily detail.
+export async function fetchListeningStats({ dailyDays = 90, maxMonths = 300 } = {}) {
+    const daily = new Map()   // YYYY-MM-DD -> seconds
+    const monthly = new Map() // YYYY-MM    -> seconds
+    const toSec = (ms) => Math.round(Number(ms) / 1000)
+
+    for (let offset = 0; offset < dailyDays; offset += 30) {
+        const start = new Date(Date.now() - (offset + 29) * 86400000)
+        const data = await apiGet("/stats/aggregates", {
+            response_groups: "total_listening_stats", store: "Audible",
+            daily_listening_interval_start_date: ymd(start), daily_listening_interval_duration: 30,
+        })
+        for (const s of data.aggregated_daily_listening_stats ?? []) daily.set(s.interval_identifier, toSec(s.aggregated_sum))
+    }
+
+    let consecutiveEmpty = 0
+    for (let offset = 0; offset < maxMonths; offset += 12) {
+        const start = new Date()
+        start.setUTCDate(1)
+        start.setUTCMonth(start.getUTCMonth() - offset - 11)
+        const data = await apiGet("/stats/aggregates", {
+            response_groups: "total_listening_stats", store: "Audible",
+            monthly_listening_interval_start_date: ym(start), monthly_listening_interval_duration: 12,
+        })
+        const list = data.aggregated_monthly_listening_stats ?? []
+        for (const s of list) monthly.set(s.interval_identifier, toSec(s.aggregated_sum))
+        if (list.length === 0) { if (++consecutiveEmpty >= 2) break } else consecutiveEmpty = 0
+    }
+
+    return { daily, monthly }
 }

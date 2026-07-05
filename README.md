@@ -58,6 +58,14 @@ from time A to time B, N seconds of audio"* — splitting on gaps longer than
 snapshots at any time (`derive-sessions --rebuild`). A book's pre-existing
 progress at first sight is a baseline and is never counted as a listen.
 
+**Historical backfill** — `library` only reports the *current* position, but
+Audible's stats endpoints hold real history, which auklet backfills on startup
+(and via `auklet backfill`): `/1.0/stats/status/finished` gives per-book **finish
+dates** (recorded as exact, back-dated finish markers so they show in history),
+and `/1.0/stats/aggregates` gives **per-day/per-month listening time** going back
+to the account's start (the `activity` view / tab). `audible-api-ts` doesn't wrap
+these, so auklet signs the requests itself (reusing the device key).
+
 Item IDs are deterministic (`audiobook.book` from `audible|<asin>`,
 `audiobook.listen` from `audible|<endedAt>|<asin>`), so restarts and full
 re-syncs upsert rather than duplicate.
@@ -74,6 +82,8 @@ auklet login                        authenticate with audible
 auklet sync-library                 refresh library from audible (rebuild current state)
 auklet sync-wishlist                refresh wishlist
 auklet derive-sessions [--rebuild]  (re)build listen sessions from snapshots
+auklet backfill                     import historical finish dates + listening time (audible stats)
+auklet activity                     monthly listening time, years back (audible stats)
 auklet verify [--strict] [--deep]   consistency + integrity checks
 auklet journey-sync [--full]        push books, listens, library events + covers to journey
 auklet hydrate                      download cover art for new books

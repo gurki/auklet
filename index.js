@@ -7,9 +7,9 @@ dotenv.config()
 import { hasCredentials } from "./src/auth.js"
 import { syncLibrary, syncWishlist } from "./src/sync.js"
 import { deriveSessions } from "./src/sessions.js"
-import { withLock, getJob, verify, journeySync, startHydrate } from "./src/ops.js"
+import { withLock, getJob, verify, journeySync, startHydrate, syncStats } from "./src/ops.js"
 import { hydrate } from "./src/hydrate.js"
-import { getStats, getBooks, getSessions, getEvents, getSnapshots, getCover } from "./src/queries.js"
+import { getStats, getBooks, getSessions, getEvents, getSnapshots, getCover, getListeningStats } from "./src/queries.js"
 import { BROWSE_HTML } from "./src/browse.js"
 import { closeDb } from "./src/db/init.js"
 
@@ -25,6 +25,7 @@ app.get("/books", (req, res) => res.json(getBooks(req.query)))
 app.get("/sessions", (req, res) => res.json(getSessions(req.query)))
 app.get("/events", (req, res) => res.json(getEvents(req.query)))
 app.get("/snapshots", (req, res) => res.json(getSnapshots(req.query)))
+app.get("/listening-stats", (req, res) => res.json(getListeningStats()))
 
 app.get("/cover/:sha256", (req, res) => {
     const cover = getCover(req.params.sha256)
@@ -54,6 +55,7 @@ function opHandler(fn, { autoSync = false } = {}) {
 
 app.post("/ops/sync-library", opHandler(() => () => syncLibrary(), { autoSync: true }))
 app.post("/ops/sync-wishlist", opHandler(() => () => syncWishlist(), { autoSync: true }))
+app.post("/ops/sync-stats", opHandler(() => () => syncStats(), { autoSync: true }))
 app.post("/ops/derive-sessions", opHandler((req) => () => deriveSessions({ rebuild: flag(req.query.rebuild) }), { autoSync: true }))
 app.post("/ops/verify", opHandler((req) => () => verify({ strict: flag(req.query.strict), deep: flag(req.query.deep) })))
 app.post("/ops/journey-sync", opHandler((req) => () => journeySync({ full: flag(req.query.full) })))
@@ -113,6 +115,8 @@ const server = app.listen(PORT, async () => {
     }
 
     await poll().catch((error) => console.error("❌ initial poll:", error.message))
+    // one-shot historical backfill (finish dates + listening time) on startup
+    await withLock(() => syncStats()).catch((error) => console.error("❌ stats backfill:", error.message))
     setInterval(() => poll().catch((error) => console.error("❌ poll:", error.message)), POLL_INTERVAL_S * 1000)
     console.log(`👂 watching audible every ${POLL_INTERVAL_S}s`)
 })

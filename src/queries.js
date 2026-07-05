@@ -9,6 +9,8 @@ const PART_HOURS = {
     night: [22, 4],
 }
 
+const FINISHED_EXPR = "(b.is_finished = 1 OR b.finished_at IS NOT NULL)"
+
 function partClause(part, column = "s.local_time") {
     const band = PART_HOURS[part]
     if (!band) return null
@@ -25,10 +27,10 @@ export function getStats() {
             (SELECT COUNT(*) FROM books) AS books,
             (SELECT COUNT(*) FROM books WHERE in_library = 1) AS library,
             (SELECT COUNT(*) FROM books WHERE on_wishlist = 1) AS wishlist,
-            (SELECT COUNT(*) FROM books WHERE is_finished = 1) AS finished,
+            (SELECT COUNT(*) FROM books b WHERE ${FINISHED_EXPR}) AS finished,
             (SELECT COUNT(*) FROM sessions) AS sessions,
             (SELECT COALESCE(SUM(listened_sec), 0) FROM sessions) AS listenedSec,
-            (SELECT COUNT(*) FROM books WHERE in_library = 1 AND is_finished = 0
+            (SELECT COUNT(*) FROM books b WHERE in_library = 1 AND NOT ${FINISHED_EXPR}
                 AND percent_complete >= 40 AND percent_complete <= 80) AS stalled
     `).get()
 
@@ -50,33 +52,72 @@ export function getStats() {
     `).all()
     const listensByHour = Array.from({ length: 24 }, (_, h) => rows.find((r) => r.hour === h)?.n ?? 0)
 
+    const lifetimeListenedSec = db.prepare("SELECT COALESCE(SUM(seconds),0) n FROM listening_stats WHERE kind='monthly'").get().n
+
     return {
-        totals,
+        totals: { ...totals, lifetimeListenedSec },
         listenedPerMonth,
         topAuthors,
         listensByHour,
         lastLibrarySync: getSyncState("last_library_sync"),
         lastWishlistSync: getSyncState("last_wishlist_sync"),
         lastJourneySync: getSyncState("last_journey_sync"),
+        lastStatsSync: getSyncState("last_stats_sync"),
     }
 }
 
-export function getBooks({ q = null, list = null, stalled = false, limit = 200, offset = 0 } = {}) {
+// Historical listening time from Audible's stats aggregates (seconds per period).
+export function getListeningStats() {
+    const db = getDb()
+    return {
+        monthly: db.prepare("SELECT period, seconds FROM listening_stats WHERE kind='monthly' ORDER BY period").all(),
+        daily: db.prepare("SELECT period, seconds FROM listening_stats WHERE kind='daily' ORDER BY period").all(),
+    }
+}
+
+// Whitelisted sort orders (interpolated into SQL, so never user text).
+// "author" keeps an author's books together and, within them, groups each
+// series in reading order; standalones interleave alphabetically by title.
+const BOOK_ORDER = {
+    author: "LOWER(COALESCE(json_extract(b.authors,'$[0]'),'~')) ASC, LOWER(COALESCE(b.series_title, b.title)) ASC, CAST(b.series_position AS REAL) ASC, LOWER(b.title) ASC",
+    series: "CASE WHEN b.series_title IS NULL THEN 1 ELSE 0 END ASC, LOWER(COALESCE(b.series_title, b.title)) ASC, CAST(b.series_position AS REAL) ASC, LOWER(b.title) ASC",
+    progress: "b.percent_complete DESC NULLS LAST, LOWER(b.title) ASC",
+    title: "LOWER(b.title) ASC",
+    recent: "b.first_seen_at DESC, LOWER(b.title) ASC",
+}
+
+export function getBooks({ q = null, list = null, stalled = false, sort = "author", limit = 200, offset = 0 } = {}) {
     const like = q ? `%${q}%` : null
     const membership = list === "wishlist" ? "AND b.on_wishlist = 1"
         : list === "library" ? "AND b.in_library = 1" : ""
-    const stalledClause = stalled ? "AND b.is_finished = 0 AND b.percent_complete >= 40 AND b.percent_complete <= 80" : ""
+    const stalledClause = stalled ? `AND NOT ${FINISHED_EXPR} AND b.percent_complete >= 40 AND b.percent_complete <= 80` : ""
+    const orderBy = BOOK_ORDER[sort] ?? BOOK_ORDER.author
 
     const books = getDb().prepare(`
         SELECT b.asin, b.title, b.subtitle, b.authors, b.narrators, b.series_title, b.series_position,
                b.duration_sec, b.release_date, b.publisher, b.cover_sha256, b.percent_complete,
-               b.is_finished, b.in_library, b.on_wishlist, b.first_seen_at,
+               b.is_finished, b.finished_at, b.in_library, b.on_wishlist, b.first_seen_at,
+               CASE
+                   WHEN ${FINISHED_EXPR} THEN 'finished'
+                   WHEN b.percent_complete > 0 THEN 'in_progress'
+                   ELSE 'unknown'
+               END AS progress_status,
+               CASE
+                   WHEN ${FINISHED_EXPR} THEN 100
+                   WHEN b.percent_complete > 0 THEN CAST(ROUND(b.percent_complete) AS INTEGER)
+                   ELSE NULL
+               END AS progress_percent,
+               CASE
+                   WHEN ${FINISHED_EXPR} THEN 'finished'
+                   WHEN b.percent_complete > 0 THEN CAST(CAST(ROUND(b.percent_complete) AS INTEGER) AS TEXT) || '%'
+                   ELSE 'unknown'
+               END AS progress_label,
                (SELECT COUNT(*) FROM sessions s WHERE s.book_asin = b.asin) AS listen_sessions,
                (SELECT COALESCE(SUM(listened_sec), 0) FROM sessions s WHERE s.book_asin = b.asin) AS listened_sec
         FROM books b
         WHERE (@like IS NULL OR b.title LIKE @like OR b.authors LIKE @like OR b.series_title LIKE @like)
           ${membership} ${stalledClause}
-        ORDER BY b.percent_complete DESC NULLS LAST, b.title
+        ORDER BY ${orderBy}
         LIMIT @limit OFFSET @offset
     `).all({ like, limit: Number(limit) || 200, offset: Number(offset) || 0 })
 

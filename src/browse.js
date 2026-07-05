@@ -45,6 +45,13 @@ export const BROWSE_HTML = `<!doctype html>
   .row .amt { font-variant-numeric: tabular-nums; color: #f7a83e; font-weight: 600; }
   button.more { margin: 18px auto; display: block; background: #1c1e26; border: 1px solid #2c2f3a;
     color: #e8e8ea; padding: 8px 18px; border-radius: 8px; cursor: pointer; }
+  .activity { max-width: 760px; margin: 0 auto; }
+  .activity .total { font-size: 15px; color: #c7c8d0; margin-bottom: 14px; }
+  .mrow { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+  .mo { width: 62px; color: #9a9ba4; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .mbar { flex: 1; height: 14px; background: #1c1e26; border-radius: 4px; overflow: hidden; }
+  .mbar > i { display: block; height: 100%; background: #f7a83e; }
+  .mv { width: 74px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -53,9 +60,17 @@ export const BROWSE_HTML = `<!doctype html>
   <div class="tabs">
     <div class="tab on" data-view="library">library</div>
     <div class="tab" data-view="history">history</div>
+    <div class="tab" data-view="activity">activity</div>
     <div class="tab" data-view="stalled">stalled</div>
   </div>
   <input id="q" placeholder="search title / author…">
+  <select id="sort" title="sort">
+    <option value="author">author &amp; series</option>
+    <option value="series">series</option>
+    <option value="progress">progress</option>
+    <option value="recent">recently added</option>
+    <option value="title">title</option>
+  </select>
   <select id="part" style="display:none">
     <option value="">all day</option>
     <option value="morning">morning</option>
@@ -71,6 +86,7 @@ export const BROWSE_HTML = `<!doctype html>
 const main = document.getElementById("main")
 const qEl = document.getElementById("q")
 const partEl = document.getElementById("part")
+const sortEl = document.getElementById("sort")
 const summary = document.getElementById("summary")
 let view = "library"
 let offset = 0
@@ -96,19 +112,20 @@ function art(sha, cls) {
 function authorsOf(json) { try { return JSON.parse(json||"[]").join(", ") } catch { return "" } }
 
 async function loadGrid(stalled) {
-  const params = new URLSearchParams({ list: "library", limit: 500 })
+  const params = new URLSearchParams({ list: "library", limit: 500, sort: sortEl.value || "author" })
   if (qEl.value) params.set("q", qEl.value)
   if (stalled) params.set("stalled", "1")
   const { books } = await fetch("/books?" + params).then(r => r.json())
   summary.textContent = books.length + (stalled ? " stalled (40–80%)" : " books")
   main.className = "grid"
   main.innerHTML = books.map(b => {
-    const pct = b.percent_complete != null ? Math.round(b.percent_complete) : null
-    const barPct = b.is_finished ? 100 : (pct || 0)
-    const bar = (b.is_finished || pct) ? '<div class="bar"><i class="' + (b.is_finished ? "fin" : "") + '" style="width:'+barPct+'%"></i></div>' : ""
-    const state = b.is_finished ? '<div class="pct done">finished</div>'
-      : pct ? '<div class="pct">'+pct+'% · '+hms(b.listened_sec)+' listened</div>'
-      : '<div class="pct muted">not started</div>'
+    const status = b.progress_status || "unknown"
+    const pct = b.progress_percent
+    const bar = status === "unknown" ? ""
+      : '<div class="bar"><i class="' + (status === "finished" ? "fin" : "") + '" style="width:'+pct+'%"></i></div>'
+    const state = status === "finished" ? '<div class="pct done">finished'+(b.finished_at ? ' · '+b.finished_at.slice(0,10) : '')+'</div>'
+      : status === "in_progress" ? '<div class="pct">'+pct+'% complete</div>'
+      : '<div class="pct muted">unknown</div>'
     return '<div class="card">' + art(b.cover_sha256) +
       '<div class="b"><div class="t">'+ (b.title||"") +'</div><div class="a">'+ authorsOf(b.authors) +'</div>'
       + bar + state + '</div></div>'
@@ -143,10 +160,31 @@ async function loadHistory(append) {
   }
 }
 
+async function loadActivity() {
+  const { monthly } = await fetch("/listening-stats").then(r => r.json())
+  main.className = "activity"
+  if (!monthly.length) {
+    summary.textContent = ""
+    main.innerHTML = '<p class="muted">no listening history yet — run <code>auklet backfill</code></p>'
+    return
+  }
+  const max = Math.max(...monthly.map(m => m.seconds))
+  const total = monthly.reduce((s, m) => s + m.seconds, 0)
+  summary.textContent = monthly.length + " months tracked"
+  main.innerHTML = '<div class="total">'+ hms(total) +' listened across '+ monthly.length +' months</div>' +
+    monthly.slice().reverse().map(m =>
+      '<div class="mrow"><span class="mo">'+ m.period +'</span>'+
+      '<span class="mbar"><i style="width:'+ Math.round((m.seconds/max)*100) +'%"></i></span>'+
+      '<span class="mv">'+ hms(m.seconds) +'</span></div>'
+    ).join("")
+}
+
 function render() {
   partEl.style.display = view === "history" ? "" : "none"
+  sortEl.style.display = (view === "library" || view === "stalled") ? "" : "none"
   main.dataset.lastDay = ""
   if (view === "history") loadHistory(false)
+  else if (view === "activity") loadActivity()
   else loadGrid(view === "stalled")
 }
 
@@ -157,6 +195,7 @@ document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
 let debounce
 qEl.oninput = () => { clearTimeout(debounce); debounce = setTimeout(render, 250) }
 partEl.onchange = render
+sortEl.onchange = render
 render()
 </script>
 </body>

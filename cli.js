@@ -115,6 +115,22 @@ const commands = {
         return 0
     },
 
+    "backfill": async (flags) => {
+        const { body } = await call("POST", "/ops/sync-stats", flags)
+        console.log(`✅ backfilled ${body.months} months + ${body.days} days of listening · ${body.finishedBooks} finished books (${body.finishMarkers} new markers)`)
+        return 0
+    },
+
+    "activity": async (flags) => {
+        const { body } = await call("GET", "/listening-stats", flags)
+        if (flags.json) return console.log(JSON.stringify(body, null, 2)) ?? 0
+        const max = Math.max(1, ...body.monthly.map((m) => m.seconds))
+        for (const m of body.monthly) {
+            console.log(`${m.period}  ${"█".repeat(Math.round((m.seconds / max) * 40))} ${hms(m.seconds)}`)
+        }
+        return 0
+    },
+
     "verify": async (flags) => {
         const { body } = await call("POST", "/ops/verify", flags)
         if (flags.json) return console.log(JSON.stringify(body, null, 2)) ?? 0
@@ -151,8 +167,9 @@ const commands = {
         if (flags.json) return console.log(JSON.stringify(body, null, 2)) ?? 0
         const t = body.totals
         console.log(`library ${t.library} · wishlist ${t.wishlist} · finished ${t.finished} · stalled ${t.stalled}`)
-        console.log(`listen sessions ${t.sessions} · total listened ${hms(t.listenedSec)}`)
-        console.log(`last library sync: ${body.lastLibrarySync ?? "never"} · last journey sync: ${body.lastJourneySync ?? "never"}\n`)
+        console.log(`observed sessions ${t.sessions} · observed listening ${hms(t.listenedSec)}`)
+        console.log(`lifetime listened (audible stats): ${hms(t.lifetimeListenedSec)}`)
+        console.log(`last library sync: ${body.lastLibrarySync ?? "never"} · last stats backfill: ${body.lastStatsSync ?? "never"}\n`)
         printTable(body.listenedPerMonth.map((m) => ({ month: m.month, sessions: m.sessions, listened: hms(m.listenedSec) })),
             ["month", "sessions", "listened"])
         console.log("")
@@ -165,9 +182,9 @@ const commands = {
         if (flags.json) return console.log(JSON.stringify(body, null, 2)) ?? 0
         printTable(body.books.map((b) => ({
             title: b.title, authors: JSON.parse(b.authors ?? "[]").join(", "),
-            "%": b.percent_complete != null ? Math.round(b.percent_complete) : "",
+            progress: b.progress_label ?? "unknown",
             listened: hms(b.listened_sec), lib: b.in_library ? "✓" : "", wish: b.on_wishlist ? "✓" : "",
-        })), ["title", "authors", "%", "listened", "lib", "wish"])
+        })), ["title", "authors", "progress", "listened", "lib", "wish"])
         return 0
     },
 
@@ -201,6 +218,8 @@ commands:
   sync-library                     refresh the library from audible (rebuild current state)
   sync-wishlist                    refresh the wishlist from audible
   derive-sessions [--rebuild]      (re)build listen sessions from progress snapshots
+  backfill                         import historical finish dates + listening time from audible stats
+  activity                         monthly listening time (from audible stats history)
   verify [--strict] [--deep]       consistency + integrity checks (exit 2 on issues)
   journey-sync [--full]            push books, listens, library events + covers to journey
   hydrate                          download cover art for new books

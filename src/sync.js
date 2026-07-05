@@ -1,8 +1,10 @@
 import { getDb } from "./db/init.js"
-import { fetchLibrary, fetchWishlist } from "./provider/audible.js"
+import { fetchLibrary, fetchWishlist, fetchFinished, fetchListeningStats } from "./provider/audible.js"
 import {
     upsertBook, setMembership, getMembership, recordChange, recordSnapshot, setSyncState,
+    upsertListeningStat, setBookFinished,
 } from "./eventstore.js"
+import { recordFinishSession } from "./sessions.js"
 
 // Fetch the full library/wishlist from Audible (the source of truth) and diff
 // it against the local membership set. This is BOTH the periodic poll and the
@@ -79,4 +81,34 @@ export async function syncWishlist() {
     setSyncState("last_wishlist_sync", new Date().toISOString())
     console.log(`⭐ wishlist: ${result.total} items · +${result.added} -${result.removed}`)
     return result
+}
+
+// Backfill *history* from Audible's stats endpoints: per-day/per-month total
+// listening time (years of it) and per-book finish dates (back-dated as exact
+// finish markers). Finish markers only apply to books currently in the library;
+// aggregate listening time is kept locally (it isn't per-book, so it doesn't map
+// to an audiobook.listen item). Idempotent - upserts and INSERT OR IGNORE.
+export async function syncStats() {
+    const finished = await fetchFinished()
+    const { daily, monthly } = await fetchListeningStats()
+    const db = getDb()
+    const durationByAsin = new Map(
+        db.prepare("SELECT asin, duration_sec FROM books").all().map((r) => [r.asin, r.duration_sec])
+    )
+
+    let markedFinished = 0, finishMarkers = 0
+    db.transaction(() => {
+        for (const [period, seconds] of monthly) upsertListeningStat("monthly", period, seconds)
+        for (const [period, seconds] of daily) upsertListeningStat("daily", period, seconds)
+        for (const [asin, finishedAt] of finished) {
+            if (!durationByAsin.has(asin)) continue // finished title no longer/not in the library
+            setBookFinished(asin, finishedAt)
+            markedFinished++
+            if (recordFinishSession(asin, finishedAt, durationByAsin.get(asin))) finishMarkers++
+        }
+    })()
+
+    setSyncState("last_stats_sync", new Date().toISOString())
+    console.log(`📈 stats: ${monthly.size} months, ${daily.size} days · ${markedFinished} finished books (${finishMarkers} new markers)`)
+    return { months: monthly.size, days: daily.size, finishedBooks: markedFinished, finishMarkers }
 }
