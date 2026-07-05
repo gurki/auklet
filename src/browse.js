@@ -31,6 +31,7 @@ export const BROWSE_HTML = `<!doctype html>
   .card .a { font-size: 12px; color: #9a9ba4; margin-top: 2px; max-height: 1.5em; overflow: hidden; }
   .bar { height: 4px; background: #2a2d3a; border-radius: 3px; margin-top: 8px; overflow: hidden; }
   .bar > i { display: block; height: 100%; background: #f7a83e; }
+  .bar > i.fin { background: #4ecb71; }
   .pct { font-size: 11px; color: #8a8b94; margin-top: 4px; }
   .done { color: #4ecb71; }
   .day { position: sticky; top: 58px; margin: 20px 0 8px; font-weight: 600; color: #c7c8d0;
@@ -103,9 +104,11 @@ async function loadGrid(stalled) {
   main.className = "grid"
   main.innerHTML = books.map(b => {
     const pct = b.percent_complete != null ? Math.round(b.percent_complete) : null
-    const bar = pct != null ? '<div class="bar"><i style="width:'+pct+'%"></i></div>' : ""
+    const barPct = b.is_finished ? 100 : (pct || 0)
+    const bar = (b.is_finished || pct) ? '<div class="bar"><i class="' + (b.is_finished ? "fin" : "") + '" style="width:'+barPct+'%"></i></div>' : ""
     const state = b.is_finished ? '<div class="pct done">finished</div>'
-      : pct != null ? '<div class="pct">'+pct+'% · '+hms(b.listened_sec)+' listened</div>' : ""
+      : pct ? '<div class="pct">'+pct+'% · '+hms(b.listened_sec)+' listened</div>'
+      : '<div class="pct muted">not started</div>'
     return '<div class="card">' + art(b.cover_sha256) +
       '<div class="b"><div class="t">'+ (b.title||"") +'</div><div class="a">'+ authorsOf(b.authors) +'</div>'
       + bar + state + '</div></div>'
