@@ -24,14 +24,10 @@ export function getStats() {
 
     const totals = db.prepare(`
         SELECT
-            (SELECT COUNT(*) FROM books) AS books,
             (SELECT COUNT(*) FROM books WHERE in_library = 1) AS library,
-            (SELECT COUNT(*) FROM books WHERE on_wishlist = 1) AS wishlist,
             (SELECT COUNT(*) FROM books b WHERE ${FINISHED_EXPR}) AS finished,
             (SELECT COUNT(*) FROM sessions) AS sessions,
-            (SELECT COALESCE(SUM(listened_sec), 0) FROM sessions) AS listenedSec,
-            (SELECT COUNT(*) FROM books b WHERE in_library = 1 AND NOT ${FINISHED_EXPR}
-                AND percent_complete >= 40 AND percent_complete <= 80) AS stalled
+            (SELECT COALESCE(SUM(listened_sec), 0) FROM sessions) AS listenedSec
     `).get()
 
     const listenedPerMonth = db.prepare(`
@@ -60,18 +56,18 @@ export function getStats() {
         topAuthors,
         listensByHour,
         lastLibrarySync: getSyncState("last_library_sync"),
-        lastWishlistSync: getSyncState("last_wishlist_sync"),
         lastJourneySync: getSyncState("last_journey_sync"),
         lastStatsSync: getSyncState("last_stats_sync"),
     }
 }
 
-// Historical listening time from Audible's stats aggregates (seconds per period).
+// Historical monthly listening time from Audible's stats (seconds per month).
+// This is Audible's own account-wide total (all books/devices), not per-book or
+// auklet-observed.
 export function getListeningStats() {
     const db = getDb()
     return {
         monthly: db.prepare("SELECT period, seconds FROM listening_stats WHERE kind='monthly' ORDER BY period").all(),
-        daily: db.prepare("SELECT period, seconds FROM listening_stats WHERE kind='daily' ORDER BY period").all(),
     }
 }
 
@@ -86,17 +82,15 @@ const BOOK_ORDER = {
     recent: "b.first_seen_at DESC, LOWER(b.title) ASC",
 }
 
-export function getBooks({ q = null, list = null, stalled = false, sort = "author", limit = 200, offset = 0 } = {}) {
+export function getBooks({ q = null, list = null, sort = "author", limit = 200, offset = 0 } = {}) {
     const like = q ? `%${q}%` : null
-    const membership = list === "wishlist" ? "AND b.on_wishlist = 1"
-        : list === "library" ? "AND b.in_library = 1" : ""
-    const stalledClause = stalled ? `AND NOT ${FINISHED_EXPR} AND b.percent_complete >= 40 AND b.percent_complete <= 80` : ""
+    const membership = list === "library" ? "AND b.in_library = 1" : ""
     const orderBy = BOOK_ORDER[sort] ?? BOOK_ORDER.author
 
     const books = getDb().prepare(`
         SELECT b.asin, b.title, b.subtitle, b.authors, b.narrators, b.series_title, b.series_position,
                b.duration_sec, b.release_date, b.publisher, b.cover_sha256, b.percent_complete,
-               b.is_finished, b.finished_at, b.in_library, b.on_wishlist, b.first_seen_at,
+               b.is_finished, b.finished_at, b.in_library, b.first_seen_at,
                CASE
                    WHEN ${FINISHED_EXPR} THEN 'finished'
                    WHEN b.percent_complete > 0 THEN 'in_progress'
@@ -116,7 +110,7 @@ export function getBooks({ q = null, list = null, stalled = false, sort = "autho
                (SELECT COALESCE(SUM(listened_sec), 0) FROM sessions s WHERE s.book_asin = b.asin) AS listened_sec
         FROM books b
         WHERE (@like IS NULL OR b.title LIKE @like OR b.authors LIKE @like OR b.series_title LIKE @like)
-          ${membership} ${stalledClause}
+          ${membership}
         ORDER BY ${orderBy}
         LIMIT @limit OFFSET @offset
     `).all({ like, limit: Number(limit) || 200, offset: Number(offset) || 0 })

@@ -4,11 +4,12 @@
 
 - **history is partly backfilled, partly live.** `auklet backfill` (also run on
   startup) pulls real history from Audible's stats endpoints: per-book **finish
-  dates** and per-day/per-month **listening time** (years back). what it CANNOT
-  reconstruct is per-book *session detail* (which book, exactly when, from/to
-  position) before the watcher ran — that only accrues live via progress
-  snapshots. library/wishlist add/remove history is also live-only (except
-  `library-added`, back-dated from Audible's purchase/added date).
+  dates** and **monthly listening time** (years back). what it CANNOT reconstruct
+  is per-book *session detail* (which book, exactly when, from/to position) before
+  the watcher ran — that only accrues live via progress snapshots. library
+  add/remove history is also live-only (except `library-added`, back-dated from
+  Audible's purchase/added date). the history view labels the two kinds
+  distinctly: exact "✓ finished" dates vs. `~`-marked estimated listening.
 
 - **aggregate listening time is local-only.** `stats/aggregates` totals aren't
   per-book, so they don't map to an `audiobook.listen` item and aren't synced to
@@ -39,8 +40,8 @@
   `db/audible-auth.json` (gitignored) and are auto-refreshed.
 
 - **full-fetch polling.** Audible has no incremental feed, so every poll fetches
-  the entire library + wishlist. large libraries may want a longer
-  `PROGRESS_INTERVAL_S` to be gentle on the api.
+  the entire library. large libraries may want a longer `PROGRESS_INTERVAL_S` to
+  be gentle on the api.
 
 ## ideas / deferred
 
@@ -52,7 +53,6 @@
   \`last_position_heard\` response group gives precise position (ms) vs the
   percent-derived estimate. now easy — the signed \`apiGet\` helper exists; just
   add the call.
-- poll the wishlist less often than the library.
 - purchases pricing, bookmarks, clips, chapter-level progress (deferred in the
   audiobooks module spec until obtainable reliably).
 - notify on finishing a book / starting a new one.

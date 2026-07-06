@@ -22,7 +22,7 @@ function book(asin, fields = {}) {
         percentComplete: fields.percentComplete,
         isFinished: fields.isFinished ?? false,
     })
-    if (fields.inLibrary) setMembership(asin, { inLibrary: true })
+    if (fields.inLibrary) setMembership(asin, true)
 }
 
 function finishWithBackfillOnly(asin, finishedAt = "2026-07-01T10:00:00Z") {
@@ -62,14 +62,4 @@ test("stats count books with only finished_at as finished", () => {
     finishWithBackfillOnly("FINISHED")
 
     expect(getStats().totals.finished).toBe(1)
-})
-
-test("stalled filter excludes books finished by stats backfill", () => {
-    book("DONE", { title: "Done", percentComplete: 50, inLibrary: true })
-    finishWithBackfillOnly("DONE")
-    book("STALLED", { title: "Stalled", percentComplete: 50, inLibrary: true })
-
-    const rows = getBooks({ stalled: true }).books
-    expect(rows.map((row) => row.asin)).toEqual(["STALLED"])
-    expect(getStats().totals.stalled).toBe(1)
 })

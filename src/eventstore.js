@@ -37,7 +37,6 @@ function prepare() {
         `),
 
         setInLibrary: db.prepare("UPDATE books SET in_library = @v WHERE asin = @asin"),
-        setOnWishlist: db.prepare("UPDATE books SET on_wishlist = @v WHERE asin = @asin"),
 
         insertEvent: db.prepare(`
             INSERT OR IGNORE INTO events (
@@ -96,17 +95,14 @@ export function upsertBook(item) {
     return item.asin
 }
 
-export function setMembership(asin, { inLibrary, onWishlist } = {}) {
-    const stmts = prepare()
-    if (inLibrary !== undefined) stmts.setInLibrary.run({ asin, v: inLibrary ? 1 : 0 })
-    if (onWishlist !== undefined) stmts.setOnWishlist.run({ asin, v: onWishlist ? 1 : 0 })
+export function setMembership(asin, inLibrary) {
+    prepare().setInLibrary.run({ asin, v: inLibrary ? 1 : 0 })
 }
 
-// Current membership set for diffing against a fresh poll.
-export function getMembership(list) {
-    const column = list === "wishlist" ? "on_wishlist" : "in_library"
+// Current in-library set, for diffing against a fresh poll.
+export function getMembership() {
     return new Set(
-        prepare().db.prepare(`SELECT asin FROM books WHERE ${column} = 1`).all().map((r) => r.asin)
+        prepare().db.prepare("SELECT asin FROM books WHERE in_library = 1").all().map((r) => r.asin)
     )
 }
 

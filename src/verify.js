@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 
 import { getDb } from "./db/init.js"
 import { hasCredentials } from "./auth.js"
-import { syncLibrary, syncWishlist } from "./sync.js"
+import { syncLibrary } from "./sync.js"
 import { localMonth } from "./time.js"
 
 // Consistency guarantee: refresh current state from the source of truth (so the
@@ -18,7 +18,6 @@ export async function verify({ strict = false, deep = false } = {}) {
     if (hasCredentials()) {
         try {
             const lib = await syncLibrary()
-            await syncWishlist()
             const inLibrary = db.prepare("SELECT COUNT(*) n FROM books WHERE in_library = 1").get().n
             check("library membership", inLibrary === lib.total,
                 `${inLibrary} books in_library vs ${lib.total} from the audible api`)

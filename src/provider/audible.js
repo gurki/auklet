@@ -1,6 +1,6 @@
 import { createSign } from "node:crypto"
 
-import { library, wishlist, refresh, AUDIBLE_LOCALES } from "audible-api-ts"
+import { library, refresh, AUDIBLE_LOCALES } from "audible-api-ts"
 
 import { loadCredentials, saveCredentials } from "../auth.js"
 
@@ -76,13 +76,6 @@ export async function fetchLibrary() {
     return items.map(normalizeItem)
 }
 
-export async function fetchWishlist() {
-    const creds = await loadCredentials()
-    const { items, credentials } = await wishlist(creds)
-    await saveCredentials(credentials)
-    return items.map(normalizeItem)
-}
-
 // --- signed raw requests -----------------------------------------------------
 // audible-api-ts doesn't wrap the /1.0/stats/* endpoints, so we replicate its
 // request signing (x-adp-token + RSA-SHA256 over method\npath\ndate\nbody\n
@@ -115,7 +108,6 @@ async function apiGet(path, query) {
     return res.json()
 }
 
-const ymd = (d) => d.toISOString().slice(0, 10)
 const ym = (d) => d.toISOString().slice(0, 7)
 
 // All historical "marked as finished" events -> Map<asin, latest finishedAt ISO>,
@@ -141,21 +133,12 @@ export async function fetchFinished() {
     return byAsin
 }
 
-// Historical listening time (seconds): monthly totals back to account start
-// (12-month windows, stop after two empty windows) plus recent daily detail.
-export async function fetchListeningStats({ dailyDays = 90, maxMonths = 300 } = {}) {
-    const daily = new Map()   // YYYY-MM-DD -> seconds
-    const monthly = new Map() // YYYY-MM    -> seconds
+// Historical monthly listening time (seconds) back to the account start:
+// 12-month windows, stop after two empty windows. This is Audible's own
+// account-wide total (all books/devices), not per-book.
+export async function fetchListeningStats({ maxMonths = 300 } = {}) {
+    const monthly = new Map() // YYYY-MM -> seconds
     const toSec = (ms) => Math.round(Number(ms) / 1000)
-
-    for (let offset = 0; offset < dailyDays; offset += 30) {
-        const start = new Date(Date.now() - (offset + 29) * 86400000)
-        const data = await apiGet("/stats/aggregates", {
-            response_groups: "total_listening_stats", store: "Audible",
-            daily_listening_interval_start_date: ymd(start), daily_listening_interval_duration: 30,
-        })
-        for (const s of data.aggregated_daily_listening_stats ?? []) daily.set(s.interval_identifier, toSec(s.aggregated_sum))
-    }
 
     let consecutiveEmpty = 0
     for (let offset = 0; offset < maxMonths; offset += 12) {
@@ -171,5 +154,5 @@ export async function fetchListeningStats({ dailyDays = 90, maxMonths = 300 } = 
         if (list.length === 0) { if (++consecutiveEmpty >= 2) break } else consecutiveEmpty = 0
     }
 
-    return { daily, monthly }
+    return { monthly }
 }

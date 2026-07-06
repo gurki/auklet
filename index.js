@@ -5,7 +5,7 @@ import * as dotenv from "dotenv"
 dotenv.config()
 
 import { hasCredentials } from "./src/auth.js"
-import { syncLibrary, syncWishlist } from "./src/sync.js"
+import { syncLibrary } from "./src/sync.js"
 import { deriveSessions } from "./src/sessions.js"
 import { withLock, getJob, verify, journeySync, startHydrate, syncStats } from "./src/ops.js"
 import { hydrate } from "./src/hydrate.js"
@@ -54,7 +54,6 @@ function opHandler(fn, { autoSync = false } = {}) {
 }
 
 app.post("/ops/sync-library", opHandler(() => () => syncLibrary(), { autoSync: true }))
-app.post("/ops/sync-wishlist", opHandler(() => () => syncWishlist(), { autoSync: true }))
 app.post("/ops/sync-stats", opHandler(() => () => syncStats(), { autoSync: true }))
 app.post("/ops/derive-sessions", opHandler((req) => () => deriveSessions({ rebuild: flag(req.query.rebuild) }), { autoSync: true }))
 app.post("/ops/verify", opHandler((req) => () => verify({ strict: flag(req.query.strict), deep: flag(req.query.deep) })))
@@ -93,14 +92,13 @@ function scheduleSync() {
 
 // --- poll loop -------------------------------------------------------------
 
-// Audible has no incremental feed, so each tick re-fetches the full library +
-// wishlist and diffs against local membership (this is also the "rebuild from
-// source of truth" path). deriveSessions runs every tick so an open session
-// closes once it has gone quiet for SESSION_GAP_S.
+// Audible has no incremental feed, so each tick re-fetches the full library and
+// diffs against the local set (this is also the "rebuild from source of truth"
+// path). deriveSessions runs every tick so an open session closes once it has
+// gone quiet for SESSION_GAP_S.
 async function poll() {
     await withLock(async () => {
         await syncLibrary()
-        await syncWishlist()
         deriveSessions()
     })
     scheduleSync()

@@ -2,7 +2,7 @@
 
 an audible watchdog and local database for audiobook library changes 📚 and listening progress 🎧.
 
-auklet watches your audible account, records every library, wishlist, and progress change as an event in a local sqlite database, and can rebuild its current state from the audible api at any time. the database is the journal; audible is the source of truth.
+auklet watches your audible account, records every library and progress change as an event in a local sqlite database, and can rebuild its current state from the audible api at any time. the database is the journal; audible is the source of truth.
 
 It is the audiobook sibling of [spike](../spike) (the Spotify watchdog), and can optionally push its data to a [Journey](../24w03-heros-path) server as `audiobook.*` items.
 
@@ -35,19 +35,18 @@ resulting credentials are saved to `db/audible-auth.json` and auto-refreshed.
 
 ## How it works
 
-Audible only exposes *state* (your current library, wishlist, and per-book
-progress), not a play-history feed. So auklet **polls and diffs snapshots over
-time**, recording change *history* into an append-only journal while treating
-Audible as the rebuildable source of truth.
+Audible only exposes *state* (your current library and per-book progress), not a
+play-history feed. So auklet **polls and diffs snapshots over time**, recording
+change *history* into an append-only journal while treating Audible as the
+rebuildable source of truth.
 
-**Events** — every poll re-fetches the full library + wishlist and diffs them
-against the local membership set:
+**Events** — every poll re-fetches the full library and diffs it against the
+local set:
 
 | kind | when |
 |------|------|
 | `library-added` 📚 | a book enters your library (first sync backfills with Audible's own purchase/added date) |
 | `library-removed` | a book leaves your library |
-| `wishlist-added` / `wishlist-removed` | wishlist membership changes |
 
 **Listen sessions** 🎧 — each poll appends an immutable `progress_snapshots` row
 for any book whose position advanced (position comes from `duration −
@@ -61,10 +60,13 @@ progress at first sight is a baseline and is never counted as a listen.
 **Historical backfill** — `library` only reports the *current* position, but
 Audible's stats endpoints hold real history, which auklet backfills on startup
 (and via `auklet backfill`): `/1.0/stats/status/finished` gives per-book **finish
-dates** (recorded as exact, back-dated finish markers so they show in history),
-and `/1.0/stats/aggregates` gives **per-day/per-month listening time** going back
-to the account's start (the `activity` view / tab). `audible-api-ts` doesn't wrap
-these, so auklet signs the requests itself (reusing the device key).
+dates** (recorded as exact, back-dated finish markers), and `/1.0/stats/aggregates`
+gives Audible's **monthly listening totals** (whole account) going back to the
+account's start — the `activity` tab. `audible-api-ts` doesn't wrap these, so
+auklet signs the requests itself (reusing the device key).
+
+The **history** keeps provenance honest: exact "✓ finished" dates from Audible
+vs. `~`-marked listening *estimated* from progress polls — never conflated.
 
 Item IDs are deterministic (`audiobook.book` from `audible|<asin>`,
 `audiobook.listen` from `audible|<endedAt>|<asin>`), so restarts and full
@@ -80,17 +82,16 @@ The daemon is the single executor; the CLI is a thin HTTP client (except
 ```
 auklet login                        authenticate with audible
 auklet sync-library                 refresh library from audible (rebuild current state)
-auklet sync-wishlist                refresh wishlist
 auklet derive-sessions [--rebuild]  (re)build listen sessions from snapshots
 auklet backfill                     import historical finish dates + listening time (audible stats)
 auklet activity                     monthly listening time, years back (audible stats)
 auklet verify [--strict] [--deep]   consistency + integrity checks
 auklet journey-sync [--full]        push books, listens, library events + covers to journey
 auklet hydrate                      download cover art for new books
-auklet stats                        library / wishlist / listen totals, top authors
-auklet books [--q] [--list library|wishlist] [--stalled]
+auklet stats                        library / finished / listening totals, top authors
+auklet books [--q] [--sort author|series|progress|recent|title]
 auklet sessions [--month] [--part morning|afternoon|evening|night] [--q]
-auklet events [--kind] [--month]    the library/wishlist change log
+auklet events [--kind] [--month]    the library change log
 ```
 
 `AUKLET_URL` (default `http://127.0.0.1:8899`) targets a remote daemon.

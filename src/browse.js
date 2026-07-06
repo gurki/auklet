@@ -1,5 +1,5 @@
-// Single-file browse UI served by the daemon: a library grid, a day-grouped
-// listen history, and a "stalled" shelf. No build step, vanilla JS, dark theme.
+// Single-file browse UI served by the daemon: a library grid, a listen/finish
+// history, and monthly activity. No build step, vanilla JS, dark theme.
 
 export const BROWSE_HTML = `<!doctype html>
 <html lang="en">
@@ -52,6 +52,8 @@ export const BROWSE_HTML = `<!doctype html>
   .mbar { flex: 1; height: 14px; background: #1c1e26; border-radius: 4px; overflow: hidden; }
   .mbar > i { display: block; height: 100%; background: #f7a83e; }
   .mv { width: 74px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .cap { color: #8a8b94; font-size: 12px; margin-bottom: 12px; }
+  .amt.fin { color: #4ecb71; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -61,7 +63,6 @@ export const BROWSE_HTML = `<!doctype html>
     <div class="tab on" data-view="library">library</div>
     <div class="tab" data-view="history">history</div>
     <div class="tab" data-view="activity">activity</div>
-    <div class="tab" data-view="stalled">stalled</div>
   </div>
   <input id="q" placeholder="search title / author…">
   <select id="sort" title="sort">
@@ -111,12 +112,11 @@ function art(sha, cls) {
 }
 function authorsOf(json) { try { return JSON.parse(json||"[]").join(", ") } catch { return "" } }
 
-async function loadGrid(stalled) {
+async function loadGrid() {
   const params = new URLSearchParams({ list: "library", limit: 500, sort: sortEl.value || "author" })
   if (qEl.value) params.set("q", qEl.value)
-  if (stalled) params.set("stalled", "1")
   const { books } = await fetch("/books?" + params).then(r => r.json())
-  summary.textContent = books.length + (stalled ? " stalled (40–80%)" : " books")
+  summary.textContent = books.length + " books"
   main.className = "grid"
   main.innerHTML = books.map(b => {
     const status = b.progress_status || "unknown"
@@ -125,7 +125,7 @@ async function loadGrid(stalled) {
       : '<div class="bar"><i class="' + (status === "finished" ? "fin" : "") + '" style="width:'+pct+'%"></i></div>'
     const state = status === "finished" ? '<div class="pct done">finished'+(b.finished_at ? ' · '+b.finished_at.slice(0,10) : '')+'</div>'
       : status === "in_progress" ? '<div class="pct">'+pct+'% complete</div>'
-      : '<div class="pct muted">unknown</div>'
+      : '<div class="pct muted" title="Audible reports no progress for this edition — may have been listened under a different edition">unknown</div>'
     return '<div class="card">' + art(b.cover_sha256) +
       '<div class="b"><div class="t">'+ (b.title||"") +'</div><div class="a">'+ authorsOf(b.authors) +'</div>'
       + bar + state + '</div></div>'
@@ -144,14 +144,29 @@ async function loadHistory(append) {
   for (const s of sessions) {
     const key = (s.local_time || s.ended_at || "").slice(0,10)
     if (key !== lastDay) { html += '<div class="day">'+ dayLabel(s.local_time || s.ended_at) +'</div>'; lastDay = key }
-    const time = (s.local_time || s.started_at || "").slice(11,16)
-    html += '<div class="row">'+ art(s.cover_sha256) +
-      '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
-      '<div class="sub">'+ authorsOf(s.authors) +' · '+ time +(s.finished?' · finished':'')+'</div></div>'+
-      '<div class="amt">'+ hms(s.listened_sec) +'</div></div>'
+    if (s.confidence === "exact") {
+      // finish marker back-dated from Audible stats: exact date, no observed listening
+      html += '<div class="row">'+ art(s.cover_sha256) +
+        '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
+        '<div class="sub">'+ authorsOf(s.authors) +'</div></div>'+
+        '<div class="amt fin">✓ finished</div></div>'
+    } else {
+      // inferred from progress polling: time and duration are estimates
+      const time = (s.local_time || s.started_at || "").slice(11,16)
+      html += '<div class="row" title="estimated from progress polling (±poll interval)">'+ art(s.cover_sha256) +
+        '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
+        '<div class="sub">'+ authorsOf(s.authors) +' · ~'+ time +(s.finished?' · finished':'') +'</div></div>'+
+        '<div class="amt">~'+ hms(s.listened_sec) +'</div></div>'
+    }
   }
   main.dataset.lastDay = lastDay
-  main.insertAdjacentHTML("beforeend", html || (append ? "" : '<p class="muted">no listens recorded yet</p>'))
+  if (!append) {
+    main.innerHTML = html
+      ? '<div class="cap">✓ finished = exact date from Audible · ~ = listening estimated from progress polls</div>' + html
+      : '<p class="muted">no listening history yet</p>'
+  } else {
+    main.insertAdjacentHTML("beforeend", html)
+  }
   const old = document.querySelector("button.more"); if (old) old.remove()
   if (sessions.length === 200) {
     const btn = document.createElement("button"); btn.className = "more"; btn.textContent = "load more"
@@ -170,8 +185,9 @@ async function loadActivity() {
   }
   const max = Math.max(...monthly.map(m => m.seconds))
   const total = monthly.reduce((s, m) => s + m.seconds, 0)
-  summary.textContent = monthly.length + " months tracked"
-  main.innerHTML = '<div class="total">'+ hms(total) +' listened across '+ monthly.length +' months</div>' +
+  summary.textContent = monthly.length + " months"
+  main.innerHTML = '<div class="total">'+ hms(total) +' listened on Audible · all books · '+ monthly.length +' months</div>' +
+    '<div class="cap">from Audible stats — whole account, not only what auklet observed</div>' +
     monthly.slice().reverse().map(m =>
       '<div class="mrow"><span class="mo">'+ m.period +'</span>'+
       '<span class="mbar"><i style="width:'+ Math.round((m.seconds/max)*100) +'%"></i></span>'+
@@ -181,11 +197,11 @@ async function loadActivity() {
 
 function render() {
   partEl.style.display = view === "history" ? "" : "none"
-  sortEl.style.display = (view === "library" || view === "stalled") ? "" : "none"
+  sortEl.style.display = view === "library" ? "" : "none"
   main.dataset.lastDay = ""
   if (view === "history") loadHistory(false)
   else if (view === "activity") loadActivity()
-  else loadGrid(view === "stalled")
+  else loadGrid()
 }
 
 document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {

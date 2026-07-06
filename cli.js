@@ -103,12 +103,6 @@ const commands = {
         return 0
     },
 
-    "sync-wishlist": async (flags) => {
-        const { body } = await call("POST", "/ops/sync-wishlist", flags)
-        console.log(`✅ wishlist: ${body.total} items · +${body.added} -${body.removed}`)
-        return 0
-    },
-
     "derive-sessions": async (flags) => {
         const { body } = await call("POST", "/ops/derive-sessions", flags)
         console.log(`✅ derived ${body.created} new listen sessions${flags.rebuild ? " (rebuilt from snapshots)" : ""}`)
@@ -117,7 +111,7 @@ const commands = {
 
     "backfill": async (flags) => {
         const { body } = await call("POST", "/ops/sync-stats", flags)
-        console.log(`✅ backfilled ${body.months} months + ${body.days} days of listening · ${body.finishedBooks} finished books (${body.finishMarkers} new markers)`)
+        console.log(`✅ backfilled ${body.months} months of listening · ${body.finishedBooks} finished books (${body.finishMarkers} new markers)`)
         return 0
     },
 
@@ -166,7 +160,7 @@ const commands = {
         const { body } = await call("GET", "/stats", flags)
         if (flags.json) return console.log(JSON.stringify(body, null, 2)) ?? 0
         const t = body.totals
-        console.log(`library ${t.library} · wishlist ${t.wishlist} · finished ${t.finished} · stalled ${t.stalled}`)
+        console.log(`library ${t.library} · finished ${t.finished}`)
         console.log(`observed sessions ${t.sessions} · observed listening ${hms(t.listenedSec)}`)
         console.log(`lifetime listened (audible stats): ${hms(t.lifetimeListenedSec)}`)
         console.log(`last library sync: ${body.lastLibrarySync ?? "never"} · last stats backfill: ${body.lastStatsSync ?? "never"}\n`)
@@ -183,8 +177,7 @@ const commands = {
         printTable(body.books.map((b) => ({
             title: b.title, authors: JSON.parse(b.authors ?? "[]").join(", "),
             progress: b.progress_label ?? "unknown",
-            listened: hms(b.listened_sec), lib: b.in_library ? "✓" : "", wish: b.on_wishlist ? "✓" : "",
-        })), ["title", "authors", "progress", "listened", "lib", "wish"])
+        })), ["title", "authors", "progress"])
         return 0
     },
 
@@ -216,17 +209,16 @@ usage: auklet <command> [flags]
 commands:
   login                            authenticate with audible (interactive browser flow)
   sync-library                     refresh the library from audible (rebuild current state)
-  sync-wishlist                    refresh the wishlist from audible
   derive-sessions [--rebuild]      (re)build listen sessions from progress snapshots
   backfill                         import historical finish dates + listening time from audible stats
   activity                         monthly listening time (from audible stats history)
   verify [--strict] [--deep]       consistency + integrity checks (exit 2 on issues)
   journey-sync [--full]            push books, listens, library events + covers to journey
   hydrate                          download cover art for new books
-  stats                            library/wishlist/listen totals, top authors
-  books [--q] [--list library|wishlist] [--stalled]
+  stats                            library / finished / listening totals, top authors
+  books [--q] [--sort author|series|progress|recent|title]
   sessions [--month] [--part morning|afternoon|evening|night] [--q]
-  events [--kind] [--month]        the library/wishlist change log
+  events [--kind] [--month]        the library change log
 
 env: AUKLET_URL (default http://127.0.0.1:8899), AUDIBLE_LOCALE (default de)`)
     return 1
