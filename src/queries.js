@@ -72,14 +72,18 @@ export function getListeningStats() {
 }
 
 // Whitelisted sort orders (interpolated into SQL, so never user text).
-// "author" keeps an author's books together and, within them, groups each
-// series in reading order; standalones interleave alphabetically by title.
 const BOOK_ORDER = {
+    // author, then each series within that author in reading order; standalones
+    // interleave alphabetically by title.
     author: "LOWER(COALESCE(json_extract(b.authors,'$[0]'),'~')) ASC, LOWER(COALESCE(b.series_title, b.title)) ASC, CAST(b.series_position AS REAL) ASC, LOWER(b.title) ASC",
-    series: "CASE WHEN b.series_title IS NULL THEN 1 ELSE 0 END ASC, LOWER(COALESCE(b.series_title, b.title)) ASC, CAST(b.series_position AS REAL) ASC, LOWER(b.title) ASC",
-    progress: "b.percent_complete DESC NULLS LAST, LOWER(b.title) ASC",
+    // by *displayed* progress: finished first, then in-progress (most complete
+    // first), then unknown - so finished books group together instead of sorting
+    // on their raw percent_complete (which is 0).
+    progress: `(CASE WHEN ${FINISHED_EXPR} THEN 2 WHEN b.percent_complete > 0 THEN 1 ELSE 0 END) DESC, b.percent_complete DESC, LOWER(b.title) ASC`,
+    // most recently acquired on Audible first (first_seen_at is the same for the
+    // whole initial import, so use the library-added event's verbatim Audible date).
+    recent: "(SELECT MAX(e.triggered_at) FROM events e WHERE e.book_asin = b.asin AND e.kind = 'library-added') DESC, LOWER(b.title) ASC",
     title: "LOWER(b.title) ASC",
-    recent: "b.first_seen_at DESC, LOWER(b.title) ASC",
 }
 
 export function getBooks({ q = null, list = null, sort = "author", limit = 200, offset = 0 } = {}) {

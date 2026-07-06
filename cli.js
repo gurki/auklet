@@ -216,7 +216,7 @@ commands:
   journey-sync [--full]            push books, listens, library events + covers to journey
   hydrate                          download cover art for new books
   stats                            library / finished / listening totals, top authors
-  books [--q] [--sort author|series|progress|recent|title]
+  books [--q] [--sort author|progress|recent|title]
   sessions [--month] [--part morning|afternoon|evening|night] [--q]
   events [--kind] [--month]        the library change log
 

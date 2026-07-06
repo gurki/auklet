@@ -66,8 +66,7 @@ export const BROWSE_HTML = `<!doctype html>
   </div>
   <input id="q" placeholder="search title / author…">
   <select id="sort" title="sort">
-    <option value="author">author &amp; series</option>
-    <option value="series">series</option>
+    <option value="author">author</option>
     <option value="progress">progress</option>
     <option value="recent">recently added</option>
     <option value="title">title</option>
