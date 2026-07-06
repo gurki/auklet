@@ -71,13 +71,6 @@ export const BROWSE_HTML = `<!doctype html>
     <option value="recent">recently added</option>
     <option value="title">title</option>
   </select>
-  <select id="part" style="display:none">
-    <option value="">all day</option>
-    <option value="morning">morning</option>
-    <option value="afternoon">afternoon</option>
-    <option value="evening">evening</option>
-    <option value="night">night</option>
-  </select>
   <span id="summary" class="muted"></span>
 </header>
 <main id="main"></main>
@@ -85,7 +78,6 @@ export const BROWSE_HTML = `<!doctype html>
 <script>
 const main = document.getElementById("main")
 const qEl = document.getElementById("q")
-const partEl = document.getElementById("part")
 const sortEl = document.getElementById("sort")
 const summary = document.getElementById("summary")
 let view = "library"
@@ -135,7 +127,6 @@ async function loadHistory(append) {
   if (!append) { offset = 0; main.innerHTML = ""; main.className = "" }
   const params = new URLSearchParams({ limit: 200, offset })
   if (qEl.value) params.set("q", qEl.value)
-  if (partEl.value) params.set("part", partEl.value)
   const { sessions } = await fetch("/sessions?" + params).then(r => r.json())
   summary.textContent = view === "history" ? "listen history" : ""
   let html = ""
@@ -195,7 +186,6 @@ async function loadActivity() {
 }
 
 function render() {
-  partEl.style.display = view === "history" ? "" : "none"
   sortEl.style.display = view === "library" ? "" : "none"
   main.dataset.lastDay = ""
   if (view === "history") loadHistory(false)
@@ -209,7 +199,6 @@ document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
 })
 let debounce
 qEl.oninput = () => { clearTimeout(debounce); debounce = setTimeout(render, 250) }
-partEl.onchange = render
 sortEl.onchange = render
 render()
 </script>

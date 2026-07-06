@@ -90,7 +90,7 @@ auklet journey-sync [--full]        push books, listens, library events + covers
 auklet hydrate                      download cover art for new books
 auklet stats                        library / finished / listening totals, top authors
 auklet books [--q] [--sort author|series|progress|recent|title]
-auklet sessions [--month] [--part morning|afternoon|evening|night] [--q]
+auklet sessions [--month] [--q]
 auklet events [--kind] [--month]    the library change log
 ```
 

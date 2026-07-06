@@ -217,7 +217,7 @@ commands:
   hydrate                          download cover art for new books
   stats                            library / finished / listening totals, top authors
   books [--q] [--sort author|progress|recent|title]
-  sessions [--month] [--part morning|afternoon|evening|night] [--q]
+  sessions [--month] [--q]
   events [--kind] [--month]        the library change log
 
 env: AUKLET_URL (default http://127.0.0.1:8899), AUDIBLE_LOCALE (default de)`)

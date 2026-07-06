@@ -1,23 +1,7 @@
 import { getDb } from "./db/init.js"
 import { getSyncState } from "./eventstore.js"
 
-// Part-of-day bands over the local hour (night wraps midnight).
-const PART_HOURS = {
-    morning: [5, 11],
-    afternoon: [12, 16],
-    evening: [17, 21],
-    night: [22, 4],
-}
-
 const FINISHED_EXPR = "(b.is_finished = 1 OR b.finished_at IS NOT NULL)"
-
-function partClause(part, column = "s.local_time") {
-    const band = PART_HOURS[part]
-    if (!band) return null
-    const [from, to] = band
-    const hour = `CAST(substr(${column}, 12, 2) AS INTEGER)`
-    return from <= to ? `${hour} BETWEEN ${from} AND ${to}` : `(${hour} >= ${from} OR ${hour} <= ${to})`
-}
 
 export function getStats() {
     const db = getDb()
@@ -122,8 +106,7 @@ export function getBooks({ q = null, list = null, sort = "author", limit = 200, 
     return { books, total: books.length }
 }
 
-export function getSessions({ month = null, part = null, q = null, asin = null, limit = 200, offset = 0 } = {}) {
-    const part_sql = part ? partClause(part) : null
+export function getSessions({ month = null, q = null, asin = null, limit = 200, offset = 0 } = {}) {
     const like = q ? `%${q}%` : null
     const sessions = getDb().prepare(`
         SELECT s.id, s.book_asin, s.started_at, s.ended_at, s.position_start_sec, s.position_end_sec,
@@ -133,7 +116,6 @@ export function getSessions({ month = null, part = null, q = null, asin = null, 
         WHERE (@month IS NULL OR s.month = @month)
           AND (@asin IS NULL OR s.book_asin = @asin)
           AND (@like IS NULL OR b.title LIKE @like OR b.authors LIKE @like)
-          ${part_sql ? `AND ${part_sql}` : ""}
         ORDER BY s.ended_at DESC
         LIMIT @limit OFFSET @offset
     `).all({ month, asin, like, limit: Number(limit) || 200, offset: Number(offset) || 0 })
