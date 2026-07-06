@@ -103,12 +103,19 @@ auklet events [--kind] [--month]    the library change log
 Set `JOURNEY_URL`, `JOURNEY_TOKEN`, `JOURNEY_CLIENT_ID` in `.env` and the daemon
 pushes (debounced, after each poll) to a Journey server as `audiobook.book`,
 `audiobook.listen`, and `audiobook.library_event` items, uploading cover blobs
-first. Install the module on the server so it accepts them:
+first.
+
+Auklet owns the `journey.audiobooks` module (`journey/` — manifest + schemas).
+Register it once per server so pushes are accepted:
 
 ```sh
-# from the journey server repo
-curl -X POST "$JOURNEY_URL/api/modules/install" ... ../24w03-heros-path/modules/audiobooks
+JOURNEY_SETUP_TOKEN=<server admin token> bun cli.js journey-register
 ```
+
+Ordering doesn't matter: pushes before registration are rejected with the
+retryable `unknown_schema` reason and drain on the next sync afterwards.
+Re-run `journey-register` after schema changes — it upserts, and the server
+refuses upgrades that would orphan a schema version still used by stored items.
 
 Pushes are idempotent (deterministic IDs, cursor-based), so re-running is safe.
 

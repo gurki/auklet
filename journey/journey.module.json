@@ -1,0 +1,71 @@
+{
+  "id": "journey.audiobooks",
+  "name": "Audiobooks",
+  "version": "0.1.0",
+  "description": "Provider-agnostic audiobook history: books, inferred listen sessions, and library/wishlist events produced by watcher clients such as auklet.",
+  "kind": [
+    "domain"
+  ],
+  "runtime": {
+    "kind": "static"
+  },
+  "schemas": [
+    {
+      "type": "audiobook.book",
+      "schemaVersion": "1",
+      "id": "https://schemas.journey.local/types/audiobook.book.v1.json",
+      "path": "schemas/types/audiobook.book.v1.schema.json",
+      "display": {
+        "title": "title",
+        "subtitle": "authors",
+        "previewRole": "cover"
+      }
+    },
+    {
+      "type": "audiobook.listen",
+      "schemaVersion": "1",
+      "id": "https://schemas.journey.local/types/audiobook.listen.v1.json",
+      "path": "schemas/types/audiobook.listen.v1.schema.json",
+      "display": {
+        "title": "book.title",
+        "subtitle": "chapterTitle"
+      }
+    },
+    {
+      "type": "audiobook.library_event",
+      "schemaVersion": "1",
+      "id": "https://schemas.journey.local/types/audiobook.library_event.v1.json",
+      "path": "schemas/types/audiobook.library_event.v1.schema.json",
+      "display": {
+        "title": "book.title",
+        "subtitle": "event"
+      }
+    }
+  ],
+  "views": [
+    {
+      "surface": "timeline",
+      "slot": "item",
+      "kind": "renderer",
+      "id": "journey.audiobooks.timeline-card",
+      "title": "Audiobook listen timeline card",
+      "itemTypes": [
+        "audiobook.listen"
+      ],
+      "renderer": "audiobook.timeline-card"
+    },
+    {
+      "surface": "table",
+      "slot": "columns",
+      "kind": "columns",
+      "id": "journey.audiobooks.table-columns",
+      "title": "Audiobook columns",
+      "itemTypes": [
+        "audiobook.listen",
+        "audiobook.book",
+        "audiobook.library_event"
+      ],
+      "renderer": "audiobook.table-columns"
+    }
+  ]
+}

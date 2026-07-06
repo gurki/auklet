@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.journey.local/types/audiobook.listen.v1.json",
+  "title": "audiobook.listen v1",
+  "description": "One audiobook listen: an exact session, an inferred session, or a partial progress observation. Item IDs are deterministic: ULID time bits from the envelope ts (the provider's raw observation timestamp), random bits from the first 80 bits of sha256('provider|ts|book.providerId'), so watcher restarts and re-imports upsert instead of duplicating. Audible sessions are inferred from progress snapshots (confidence: inferred): startedAt/endedAt bound the observation, listenedSec is the audio actually observed advancing.",
+  "type": "object",
+  "required": ["provider", "book"],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Open-world provider slug, e.g. audible."
+    },
+    "book": {
+      "type": "object",
+      "required": ["title", "providerId"],
+      "description": "Snapshot of the book as observed. The referenced audiobook.book item's ID is derived from provider|providerId.",
+      "properties": {
+        "itemId": { "type": "string", "description": "ULID of the referenced audiobook.book item (derivable; provided for convenience)." },
+        "title": { "type": "string", "minLength": 1 },
+        "authors": { "type": "array", "items": { "type": "string" } },
+        "providerId": { "type": "string" }
+      }
+    },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "endedAt": { "type": "string", "format": "date-time" },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "For a partial observation with no bounded session."
+    },
+    "positionStartSec": { "type": "integer", "minimum": 0 },
+    "positionEndSec": { "type": "integer", "minimum": 0 },
+    "listenedSec": { "type": "integer", "minimum": 0 },
+    "percentComplete": { "type": "number", "minimum": 0, "maximum": 100 },
+    "chapterTitle": { "type": "string" },
+    "chapterIndex": { "type": "integer", "minimum": 0 },
+    "playbackSpeed": { "type": "number", "minimum": 0 },
+    "finished": { "type": "boolean" },
+    "deviceName": { "type": "string" },
+    "marketplace": { "type": "string" },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "How the observation was obtained, e.g. progress-poll, import, manual."
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["exact", "inferred", "partial"],
+      "default": "exact"
+    }
+  }
+}

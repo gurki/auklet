@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.journey.local/types/audiobook.book.v1.json",
+  "title": "audiobook.book v1",
+  "description": "Cached metadata for one audiobook edition, distinct from the written book because narrator, duration, language, release date and provider id may differ. Item IDs are deterministic: random bits from the first 80 bits of sha256('provider|providerId') for the first provider seen, so watchers upsert instead of duplicating. Cover art must be downloaded into a blob (attachment role 'artwork'); cover.url is provenance only and will rot.",
+  "type": "object",
+  "required": ["title", "authors"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "authors": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "narrators": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "series": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "position": {
+          "type": "string",
+          "description": "Verbatim provider sequence; a string because it may be non-integer, e.g. '1', '1.5'."
+        }
+      }
+    },
+    "language": { "type": "string" },
+    "durationSec": { "type": "integer", "minimum": 0 },
+    "releaseDate": {
+      "type": "string",
+      "description": "Verbatim provider string; the format is self-describing precision ('2020', '2020-09', '2020-09-03')."
+    },
+    "publisher": { "type": "string" },
+    "providerIds": {
+      "type": "object",
+      "description": "Provider-specific IDs, e.g. audible: 'B08G9PRS1K'.",
+      "additionalProperties": { "type": "string" }
+    },
+    "cover": {
+      "type": "object",
+      "description": "Provenance record of the provider's cover URL. The durable copy is the 'artwork' attachment blob.",
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "width": { "type": "integer", "minimum": 0 },
+        "height": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

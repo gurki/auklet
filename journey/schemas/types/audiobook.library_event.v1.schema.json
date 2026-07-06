@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.journey.local/types/audiobook.library_event.v1.json",
+  "title": "audiobook.library_event v1",
+  "description": "An audiobook library or wishlist membership change. Item IDs are deterministic: ULID time bits from the envelope ts, random bits from the first 80 bits of sha256('provider|event|ts|book.providerId'), so re-observation and re-import are idempotent.",
+  "type": "object",
+  "required": ["event", "provider", "book"],
+  "properties": {
+    "event": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Open-world event kind. Core vocabulary: library-added, library-removed, wishlist-added, wishlist-removed."
+    },
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Open-world provider slug, e.g. audible."
+    },
+    "book": {
+      "type": "object",
+      "required": ["title", "providerId"],
+      "description": "Snapshot of the book as observed. The referenced audiobook.book item's ID is derived from provider|providerId.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "authors": { "type": "array", "items": { "type": "string" } },
+        "providerId": { "type": "string" }
+      }
+    },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When Journey observed the change. Envelope ts is the provider's time when known (e.g. purchase/added date), else the poll time."
+    }
+  }
+}

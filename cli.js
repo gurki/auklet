@@ -3,9 +3,12 @@
 // Thin HTTP client for the running auklet daemon, plus the interactive `login`
 // command (which talks to Audible directly, not the daemon). The daemon is the
 // single executor (db + audible credentials); most commands just call its
-// endpoints and render the results.
+// endpoints and render the results. `journey-register` is another exception:
+// an admin call straight to the journey server, so the setup token never
+// reaches the daemon.
 
 import { login as audibleLogin, register } from "audible-api-ts"
+import { readFileSync } from "node:fs"
 import readline from "node:readline/promises"
 import { stdin, stdout } from "node:process"
 
@@ -141,6 +144,8 @@ const commands = {
         return body.rejected.length ? 2 : 0
     },
 
+    "journey-register": async (flags) => registerJourneyModule(flags),
+
     "hydrate": async (flags) => {
         const { body } = await call("POST", "/ops/hydrate", flags)
         console.log(`⏳ hydrate started (job ${body.id})`)
@@ -201,6 +206,51 @@ const commands = {
     },
 }
 
+// Register this repo's journey module (journey/journey.module.json) with a
+// journey server: inline the schema files the manifest references by path,
+// then POST the self-contained manifest to /api/modules/register. Re-running
+// upserts the manifest; the server refuses upgrades that would orphan a
+// schema version still used by stored items.
+async function registerJourneyModule(flags) {
+    const journeyUrl = flags.url || process.env.JOURNEY_URL || "http://127.0.0.1:8090"
+    const setupToken = process.env.JOURNEY_SETUP_TOKEN
+    if (!setupToken) {
+        console.error("❌ JOURNEY_SETUP_TOKEN must be set (the journey server's admin token)")
+        return 1
+    }
+    const dir = new URL("./journey/", import.meta.url)
+    const manifest = JSON.parse(readFileSync(new URL("journey.module.json", dir), "utf8"))
+    for (const schema of manifest.schemas ?? []) {
+        if (schema.schema || !schema.path) continue
+        const content = JSON.parse(readFileSync(new URL(schema.path, dir), "utf8"))
+        if (content.$id && content.$id !== schema.id) {
+            console.error(`❌ ${schema.path}: $id ${content.$id} does not match manifest id ${schema.id}`)
+            return 1
+        }
+        schema.schema = content
+    }
+
+    let res
+    try {
+        res = await fetch(new URL("/api/modules/register", journeyUrl), {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${setupToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(manifest),
+        })
+    } catch {
+        console.error(`❌ journey server unreachable at ${journeyUrl} (JOURNEY_URL or --url to override)`)
+        return 1
+    }
+    const body = await res.json().catch(() => null)
+    if (!res.ok) {
+        console.error(`❌ ${res.status}:`, body?.error ?? res.statusText)
+        return 1
+    }
+    const types = (body.schemas ?? []).map((s) => `${s.type} v${s.schemaVersion}`).join(", ")
+    console.log(`✅ registered ${body.id} ${body.version} (${types})${body.enabled ? "" : " · currently disabled"}`)
+    return 0
+}
+
 function usage() {
     console.log(`🐦 auklet - audible watchdog
 
@@ -214,13 +264,15 @@ commands:
   activity                         monthly listening time (from audible stats history)
   verify [--strict] [--deep]       consistency + integrity checks (exit 2 on issues)
   journey-sync [--full]            push books, listens, library events + covers to journey
+  journey-register [--url <base>]  register the audiobooks module (journey/) with the journey server
   hydrate                          download cover art for new books
   stats                            library / finished / listening totals, top authors
   books [--q] [--sort author|progress|recent|title]
   sessions [--month] [--q]
   events [--kind] [--month]        the library change log
 
-env: AUKLET_URL (default http://127.0.0.1:8899), AUDIBLE_LOCALE (default de)`)
+env: AUKLET_URL (default http://127.0.0.1:8899), AUDIBLE_LOCALE (default de)
+     JOURNEY_URL, JOURNEY_SETUP_TOKEN (journey-register only)`)
     return 1
 }
 
