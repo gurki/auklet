@@ -1,5 +1,6 @@
 import { getDb } from "./db/init.js"
 import { getSyncState } from "./eventstore.js"
+import { coverPath } from "./hydrate.js"
 
 const FINISHED_EXPR = "(b.is_finished = 1 OR b.finished_at IS NOT NULL)"
 
@@ -147,5 +148,6 @@ export function getSnapshots({ asin, limit = 500 } = {}) {
 }
 
 export function getCover(sha256) {
-    return getDb().prepare("SELECT path, content_type FROM covers WHERE sha256 = ?").get(sha256) ?? null
+    const cover = getDb().prepare("SELECT content_type FROM covers WHERE sha256 = ?").get(sha256)
+    return cover ? { ...cover, path: coverPath(sha256) } : null
 }

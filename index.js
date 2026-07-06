@@ -16,6 +16,12 @@ import { closeDb } from "./src/db/init.js"
 const PORT = Number(process.env.PORT) || 8899
 const POLL_INTERVAL_S = Number(process.env.PROGRESS_INTERVAL_S) || 60
 const app = express()
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐦</text></svg>`
+
+app.get(["/favicon.ico", "/favicon.svg"], (req, res) => {
+    res.set("Cache-Control", "public, max-age=86400")
+    res.type("image/svg+xml").send(FAVICON)
+})
 
 // --- health + inspection --------------------------------------------------
 
