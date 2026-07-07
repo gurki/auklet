@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 
 import { getDb } from "./db/init.js"
 import { getSyncState, setSyncState } from "./eventstore.js"
+import { coverPath } from "./hydrate.js"
 import { entityUlid, bookKey } from "./ids.js"
 
 // Push auklet's canonical data to a journey server as audiobook.* items over
@@ -147,7 +148,10 @@ async function uploadBlob(cfg, cover, result) {
     const head = await api(cfg, "HEAD", `/api/blobs/sha256:${cover.sha256}`)
     if (head.status === 200) { result.blobsSkipped++; return }
 
-    const bytes = readFileSync(cover.path)
+    // Derive the path from the hash instead of trusting the stored absolute
+    // path: the content-addressed layout is the contract, so the database
+    // stays portable across machines.
+    const bytes = readFileSync(coverPath(cover.sha256))
     const res = await api(cfg, "PUT", `/api/blobs/sha256:${cover.sha256}`, bytes, {
         "Content-Type": cover.content_type ?? "application/octet-stream",
     })
