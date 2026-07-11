@@ -147,7 +147,7 @@ async function loadGrid() {
       : '<div class="bar"><i class="' + (status === "finished" ? "fin" : "") + '" style="width:'+pct+'%"></i></div>'
     const state = status === "finished" ? '<div class="pct done">finished'+(b.finished_at ? ' · '+b.finished_at.slice(0,10) : '')+'</div>'
       : status === "in_progress" ? '<div class="pct">'+pct+'% complete</div>'
-      : '<div class="pct muted" title="Audible reports no progress for this edition — may have been listened under a different edition">unknown</div>'
+      : '<div class="pct muted" title="No trusted progress signal for this title">unknown</div>'
     return '<div class="card">' + art(b.cover_sha256) +
       '<div class="b"><div class="t">'+ (b.title||"") +'</div><div class="a">'+ authorsOf(b.authors) +'</div>'
       + bar + state + '</div></div>'
@@ -165,12 +165,17 @@ async function loadHistory(append) {
   for (const s of sessions) {
     const key = (s.local_time || s.ended_at || "").slice(0,10)
     if (key !== lastDay) { html += '<div class="day">'+ dayLabel(s.local_time || s.ended_at) +'</div>'; lastDay = key }
-    if (s.confidence === "exact") {
+    if (s.display_confidence === "exact") {
       // finish marker back-dated from Audible stats: exact date, no observed listening
       html += '<div class="row">'+ art(s.cover_sha256) +
         '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
         '<div class="sub">'+ authorsOf(s.authors) +'</div></div>'+
         '<div class="amt fin">✓ finished</div></div>'
+    } else if (s.display_confidence === "pre_tracking") {
+      html += '<div class="row">'+ art(s.cover_sha256) +
+        '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
+        '<div class="sub">'+ authorsOf(s.authors) +' · pre-tracking</div></div>'+
+        '<div class="amt">unknown</div></div>'
     } else {
       // inferred from progress polling: time and duration are estimates
       const time = (s.local_time || s.started_at || "").slice(11,16)
@@ -183,7 +188,7 @@ async function loadHistory(append) {
   main.dataset.lastDay = lastDay
   if (!append) {
     main.innerHTML = html
-      ? '<div class="cap">✓ finished = exact date from Audible · ~ = listening estimated from progress polls</div>' + html
+      ? '<div class="cap">✓ finished = trusted finish date · unknown = before reliable progress tracking · ~ = estimated from progress polls</div>' + html
       : '<p class="muted">no listening history yet</p>'
   } else {
     main.insertAdjacentHTML("beforeend", html)

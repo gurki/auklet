@@ -1,10 +1,12 @@
 import { test, expect, beforeEach } from "bun:test"
 
 import { getDb } from "../src/db/init.js"
-import { upsertBook, setMembership } from "../src/eventstore.js"
-import { getBooks, getStats } from "../src/queries.js"
+import { upsertBook, setMembership, recordSnapshot, setSyncState } from "../src/eventstore.js"
+import { recordFinishSession } from "../src/sessions.js"
+import { getBooks, getSessions, getStats } from "../src/queries.js"
 
 // Run with: AUKLET_DB_PATH=:memory: bun test
+process.env.AUKLET_DB_PATH ||= ":memory:"
 
 beforeEach(() => {
     const db = getDb()
@@ -47,19 +49,55 @@ test("positive progress is reported as in progress with a rounded percent", () =
     expect(row.progress_label).toBe("43%")
 })
 
-test("finished_at is authoritative even when raw audible progress is zero", () => {
+test("backfilled finishes before tracking are displayed as unknown", () => {
     book("FINISHED", { percentComplete: 0, isFinished: false })
-    finishWithBackfillOnly("FINISHED")
+    setSyncState("tracking_started_at", "2026-07-02T00:00:00Z")
+    finishWithBackfillOnly("FINISHED", "2026-07-01T10:00:00Z")
+
+    const row = getBooks().books[0]
+    expect(row.progress_status).toBe("unknown")
+    expect(row.progress_percent).toBeNull()
+    expect(row.progress_label).toBe("unknown")
+})
+
+test("backfilled finishes after tracking are trusted", () => {
+    book("FINISHED", { percentComplete: 0, isFinished: false })
+    setSyncState("tracking_started_at", "2026-07-01T00:00:00Z")
+    finishWithBackfillOnly("FINISHED", "2026-07-02T10:00:00Z")
 
     const row = getBooks().books[0]
     expect(row.progress_status).toBe("finished")
     expect(row.progress_percent).toBe(100)
     expect(row.progress_label).toBe("finished")
+    expect(getStats().totals.finished).toBe(1)
 })
 
-test("stats count books with only finished_at as finished", () => {
-    book("FINISHED", { percentComplete: 0, isFinished: false })
-    finishWithBackfillOnly("FINISHED")
+test("baseline finished state is not trusted until a later finish observation", () => {
+    book("FINISHED", { percentComplete: 100, isFinished: true })
+    setSyncState("tracking_started_at", "2026-07-01T00:00:00Z")
+    recordSnapshot({ asin: "FINISHED", observedAt: "2026-07-01T10:00:00Z", percentComplete: 100, positionSec: 36000, isFinished: true })
 
-    expect(getStats().totals.finished).toBe(1)
+    expect(getBooks().books[0].progress_status).toBe("unknown")
+
+    recordSnapshot({ asin: "FINISHED", observedAt: "2026-07-01T10:10:00Z", percentComplete: 100, positionSec: 36000, isFinished: false })
+    recordSnapshot({ asin: "FINISHED", observedAt: "2026-07-01T10:20:00Z", percentComplete: 100, positionSec: 36000, isFinished: true })
+
+    expect(getBooks().books[0].progress_status).toBe("finished")
+})
+
+test("history marks pre-tracking exact finish markers as unknown", () => {
+    book("FINISHED", { percentComplete: 0, isFinished: false })
+    setSyncState("tracking_started_at", "2026-07-02T00:00:00Z")
+    recordFinishSession("FINISHED", "2026-07-01T10:00:00Z", 36000)
+
+    expect(getSessions().sessions[0].confidence).toBe("exact")
+    expect(getSessions().sessions[0].display_confidence).toBe("pre_tracking")
+})
+
+test("history keeps exact finish markers after tracking trusted", () => {
+    book("FINISHED", { percentComplete: 0, isFinished: false })
+    setSyncState("tracking_started_at", "2026-07-01T00:00:00Z")
+    recordFinishSession("FINISHED", "2026-07-02T10:00:00Z", 36000)
+
+    expect(getSessions().sessions[0].display_confidence).toBe("exact")
 })

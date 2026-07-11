@@ -166,6 +166,12 @@ export function setSyncState(key, value) {
     `).run(key, String(value))
 }
 
+export function setSyncStateOnce(key, value) {
+    prepare().db.prepare(`
+        INSERT OR IGNORE INTO sync_state (key, value, updated_at) VALUES (?, ?, datetime('now'))
+    `).run(key, String(value))
+}
+
 // --- historical backfill (Audible stats endpoints) --------------------------
 
 export function upsertListeningStat(kind, period, seconds) {

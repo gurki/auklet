@@ -12,7 +12,7 @@
     "dev": "bun --watch index.js",
     "start": "bun index.js",
     "login": "bun cli.js login",
-    "test": "bun test"
+    "test": "AUKLET_DB_PATH=:memory: bun test"
   },
   "dependencies": {
     "audible-api-ts": "^0.2.0",

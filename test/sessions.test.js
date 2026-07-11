@@ -5,6 +5,7 @@ import { upsertBook, recordSnapshot } from "../src/eventstore.js"
 import { deriveSessions } from "../src/sessions.js"
 
 // Run with: AUKLET_DB_PATH=:memory: bun test
+process.env.AUKLET_DB_PATH ||= ":memory:"
 
 const asin = "TESTBOOK1"
 

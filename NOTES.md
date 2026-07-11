@@ -8,8 +8,10 @@
   is per-book *session detail* (which book, exactly when, from/to position) before
   the watcher ran — that only accrues live via progress snapshots. library
   add/remove history is also live-only (except `library-added`, back-dated from
-  Audible's purchase/added date). the history view labels the two kinds
-  distinctly: exact "✓ finished" dates vs. `~`-marked estimated listening.
+  Audible's purchase/added date). the history view only labels finish markers as
+  "✓ finished" once they fall after the trusted tracking cutoff; older markers
+  are shown as unknown/pre-tracking so partial backfill does not pretend to be a
+  complete history. live progress-derived listens remain `~`-marked estimates.
 
 - **aggregate listening time is local-only.** `stats/aggregates` totals aren't
   per-book, so they don't map to an `audiobook.listen` item and aren't synced to
@@ -49,6 +51,10 @@
   books via each item's \`relationships\` (other-edition asins), not just exact
   asin, to recover finishes that read "unknown" because a different edition was
   finished. auklet already exposes a signed \`apiGet\`, so this is now tractable.
+- **uptime-aware trust windows.** the current certainty cutoff is a single
+  `tracking_started_at` timestamp (or `AUKLET_TRUST_AFTER` override). later,
+  track successful poll windows so finish/listen certainty can account for
+  outages instead of treating all time after startup equally.
 - **exact last position.** \`POST /1.0/content/{asin}/licenserequest\` with the
   \`last_position_heard\` response group gives precise position (ms) vs the
   percent-derived estimate. now easy — the signed \`apiGet\` helper exists; just

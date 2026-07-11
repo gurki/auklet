@@ -1,7 +1,7 @@
 import { getDb } from "./db/init.js"
 import { fetchLibrary, fetchFinished, fetchListeningStats } from "./provider/audible.js"
 import {
-    upsertBook, setMembership, getMembership, recordChange, recordSnapshot, setSyncState,
+    upsertBook, setMembership, getMembership, recordChange, recordSnapshot, getSyncState, setSyncState, setSyncStateOnce,
     upsertListeningStat, setBookFinished,
 } from "./eventstore.js"
 import { recordFinishSession } from "./sessions.js"
@@ -53,6 +53,10 @@ export async function syncLibrary() {
         }
     })()
 
+    const firstObserved = getSyncState("tracking_started_at")
+        || db.prepare("SELECT MIN(observed_at) AS ts FROM progress_snapshots").get()?.ts
+        || now
+    setSyncStateOnce("tracking_started_at", firstObserved)
     setSyncState("last_library_sync", now)
     console.log(`📚 library: ${items.length} books · +${added} -${removed} · ${snapshots} progress snapshots`)
     return { total: items.length, added, removed, snapshots }
