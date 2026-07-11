@@ -55,11 +55,12 @@ export const BROWSE_HTML = `<!doctype html>
   .bar > i.fin { background: var(--accent-hot); }
   .pct { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .done { color: var(--accent-hot); }
-  .day { position: sticky; top: 61px; margin: 20px 0 8px; font-weight: 700; color: #c8c8c8;
-    background: var(--bg); padding: 4px 0; }
-  .row { display: flex; gap: 12px; align-items: center; padding: 8px; border-radius: 8px; }
+  main.timeline { max-width: 720px; margin: 0 auto; padding: 18px 16px 60px; }
+  .day { position: sticky; top: 61px; padding: 10px 4px 6px; font-size: 12px; font-weight: 700;
+    color: #c8c8c8; background: var(--bg); }
+  .row { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; }
   .row:hover { background: var(--surface); }
-  .row img, .row .noart { width: 46px; height: 46px; border-radius: 6px; aspect-ratio: auto; }
+  .row img, .row .noart { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 5px; aspect-ratio: auto; }
   .row .meta { flex: 1; min-width: 0; }
   .row .t { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -74,7 +75,7 @@ export const BROWSE_HTML = `<!doctype html>
   .mbar { flex: 1; height: 14px; background: var(--surface); border-radius: 4px; overflow: hidden; }
   .mbar > i { display: block; height: 100%; background: var(--warm); }
   .mv { width: 74px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .cap { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .cap { color: var(--muted); font-size: 12px; margin: 0 4px 4px; }
   .amt.fin { color: var(--accent-hot); font-weight: 600; }
 
   @media (max-width: 620px) {
@@ -155,7 +156,7 @@ async function loadGrid() {
 }
 
 async function loadHistory(append) {
-  if (!append) { offset = 0; main.innerHTML = ""; main.className = "" }
+  if (!append) { offset = 0; main.innerHTML = ""; main.className = "timeline" }
   const params = new URLSearchParams({ limit: 200, offset })
   if (qEl.value) params.set("q", qEl.value)
   const { sessions } = await fetch("/sessions?" + params).then(r => r.json())
