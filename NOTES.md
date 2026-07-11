@@ -16,7 +16,7 @@
 - **aggregate listening time is local-only.** `stats/aggregates` totals aren't
   per-book, so they don't map to an `audiobook.listen` item and aren't synced to
   Journey — they live in `listening_stats` and the `activity` view. finish
-  markers and inferred sessions do sync.
+  markers and inferred sessions sync only when Journey is explicitly enabled.
 
 - **false-negative progress ("unknown").** a book shows "unknown" when Audible
   reports position 0 and no finish for *that asin*. confirmed not a

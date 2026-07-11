@@ -100,8 +100,13 @@ auklet events [--kind] [--month]    the library change log
 
 ## Journey sync (optional)
 
-Set `JOURNEY_URL`, `JOURNEY_TOKEN`, `JOURNEY_CLIENT_ID` in `.env` and the daemon
-pushes (debounced, after each poll) to a Journey server as `audiobook.book`,
+Journey is opt-in. Run `journey-sync` manually when `JOURNEY_URL`,
+`JOURNEY_TOKEN`, and `JOURNEY_CLIENT_ID` are configured, or set
+`JOURNEY_ENABLED=true` to let the daemon push automatically after each poll.
+Without `JOURNEY_ENABLED=true`, auklet still hydrates covers and runs locally
+without contacting Journey.
+
+When enabled, auklet pushes to a Journey server as `audiobook.book`,
 `audiobook.listen`, and `audiobook.library_event` items, uploading cover blobs
 first.
 

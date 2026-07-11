@@ -78,7 +78,9 @@ app.get("/ops/jobs/:id", (req, res) => {
 // push only if configured. Failures retry next tick since neither hydrate nor
 // the journey cursors advance on error.
 let syncTimer = null
-const journeyConfigured = () => Boolean(process.env.JOURNEY_TOKEN && process.env.JOURNEY_CLIENT_ID)
+const enabled = (value) => ["1", "true", "yes", "on"].includes(String(value ?? "").toLowerCase())
+const journeyConfigured = () => enabled(process.env.JOURNEY_ENABLED)
+    && Boolean(process.env.JOURNEY_TOKEN && process.env.JOURNEY_CLIENT_ID)
 
 function scheduleSync() {
     clearTimeout(syncTimer)
