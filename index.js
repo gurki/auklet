@@ -17,6 +17,9 @@ const PORT = Number(process.env.PORT) || 8899
 const POLL_INTERVAL_S = Number(process.env.PROGRESS_INTERVAL_S) || 60
 const app = express()
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐦</text></svg>`
+const enabled = (value) => ["1", "true", "yes", "on"].includes(String(value ?? "").toLowerCase())
+const journeyConfigured = () => Boolean(process.env.JOURNEY_TOKEN && process.env.JOURNEY_CLIENT_ID)
+const journeyAutoSync = () => enabled(process.env.JOURNEY_ENABLED) && journeyConfigured()
 
 app.get(["/favicon.ico", "/favicon.svg"], (req, res) => {
     res.set("Cache-Control", "public, max-age=86400")
@@ -26,7 +29,15 @@ app.get(["/favicon.ico", "/favicon.svg"], (req, res) => {
 // --- health + inspection --------------------------------------------------
 
 app.get("/healthz", (req, res) => res.json({ ok: true, uptime: process.uptime() }))
-app.get("/stats", (req, res) => res.json(getStats()))
+app.get("/stats", (req, res) => {
+    const stats = getStats()
+    res.json({
+        ...stats,
+        journey: journeyConfigured()
+            ? { automatic: journeyAutoSync(), lastSyncAt: stats.lastJourneySync }
+            : null,
+    })
+})
 app.get("/books", (req, res) => res.json(getBooks(req.query)))
 app.get("/sessions", (req, res) => res.json(getSessions(req.query)))
 app.get("/events", (req, res) => res.json(getEvents(req.query)))
@@ -78,9 +89,6 @@ app.get("/ops/jobs/:id", (req, res) => {
 // push only if configured. Failures retry next tick since neither hydrate nor
 // the journey cursors advance on error.
 let syncTimer = null
-const enabled = (value) => ["1", "true", "yes", "on"].includes(String(value ?? "").toLowerCase())
-const journeyConfigured = () => enabled(process.env.JOURNEY_ENABLED)
-    && Boolean(process.env.JOURNEY_TOKEN && process.env.JOURNEY_CLIENT_ID)
 
 function scheduleSync() {
     clearTimeout(syncTimer)
@@ -88,7 +96,7 @@ function scheduleSync() {
         withLock(async () => {
             const h = await hydrate()
             if (h.hydrated) console.log(`🎨 hydrated ${h.coversDownloaded} covers for ${h.hydrated} books`)
-            if (journeyConfigured()) {
+            if (journeyAutoSync()) {
                 const j = await journeySync()
                 if (j.books || j.listens || j.libraryEvents) {
                     console.log(`🛰️ journey: ${j.books} books, ${j.listens} listens, ${j.libraryEvents} library events`)

@@ -41,6 +41,10 @@ export const BROWSE_HTML = `<!doctype html>
   main { padding: 18px; }
   .muted { color: var(--muted); }
   #summary { margin-left: auto; white-space: nowrap; font-size: 13px; }
+  #journey { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; }
+  #journey i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-hot); }
+  #journey.pending i { background: var(--dim); }
+  [hidden] { display: none !important; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
   .card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
     transition: border-color 120ms ease, background 120ms ease; }
@@ -103,6 +107,7 @@ export const BROWSE_HTML = `<!doctype html>
     <option value="recent">recently added</option>
     <option value="title">title</option>
   </select>
+  <span id="journey" class="muted" hidden><i></i><span></span></span>
   <span id="summary" class="muted"></span>
 </header>
 <main id="main"></main>
@@ -112,6 +117,7 @@ const main = document.getElementById("main")
 const qEl = document.getElementById("q")
 const sortEl = document.getElementById("sort")
 const summary = document.getElementById("summary")
+const journeyEl = document.getElementById("journey")
 let view = "library"
 let offset = 0
 
@@ -135,6 +141,30 @@ function art(sha, cls) {
 }
 function authorsOf(json) { try { return JSON.parse(json||"[]").join(", ") } catch { return "" } }
 
+function relativeTime(iso) {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (seconds < 60) return "just now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return minutes + "m ago"
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return hours + "h ago"
+  return Math.floor(hours / 24) + "d ago"
+}
+
+async function loadJourneyStatus() {
+  const { journey } = await fetch("/stats").then(r => r.json())
+  if (!journey) return
+  journeyEl.hidden = false
+  journeyEl.classList.toggle("pending", !journey.lastSyncAt)
+  journeyEl.querySelector("span").textContent = journey.lastSyncAt
+    ? "journey · synced " + relativeTime(journey.lastSyncAt)
+    : "journey · not synced"
+  const mode = journey.automatic ? "automatic sync" : "manual sync"
+  journeyEl.title = journey.lastSyncAt
+    ? mode + " · last successful sync: " + journey.lastSyncAt
+    : mode + " · no successful Journey sync yet"
+}
+
 async function loadGrid() {
   const params = new URLSearchParams({ list: "library", limit: 500, sort: sortEl.value || "author" })
   if (qEl.value) params.set("q", qEl.value)
@@ -157,7 +187,7 @@ async function loadGrid() {
 
 async function loadHistory(append) {
   if (!append) { offset = 0; main.innerHTML = ""; main.className = "timeline" }
-  const params = new URLSearchParams({ limit: 200, offset })
+  const params = new URLSearchParams({ limit: 200, offset, hideUnknown: "1" })
   if (qEl.value) params.set("q", qEl.value)
   const { sessions } = await fetch("/sessions?" + params).then(r => r.json())
   summary.textContent = view === "history" ? "listen history" : ""
@@ -172,24 +202,19 @@ async function loadHistory(append) {
         '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
         '<div class="sub">'+ authorsOf(s.authors) +'</div></div>'+
         '<div class="amt fin">✓ finished</div></div>'
-    } else if (s.display_confidence === "pre_tracking") {
-      html += '<div class="row">'+ art(s.cover_sha256) +
-        '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
-        '<div class="sub">'+ authorsOf(s.authors) +' · pre-tracking</div></div>'+
-        '<div class="amt">unknown</div></div>'
     } else {
       // inferred from progress polling: time and duration are estimates
       const time = (s.local_time || s.started_at || "").slice(11,16)
       html += '<div class="row" title="estimated from progress polling (±poll interval)">'+ art(s.cover_sha256) +
         '<div class="meta"><div class="t">'+ (s.title||"") +'</div>'+
-        '<div class="sub">'+ authorsOf(s.authors) +' · ~'+ time +(s.finished?' · finished':'') +'</div></div>'+
-        '<div class="amt">~'+ hms(s.listened_sec) +'</div></div>'
+        '<div class="sub">'+ authorsOf(s.authors) +' · '+ time +(s.finished?' · finished':'') +'</div></div>'+
+        '<div class="amt">'+ hms(s.listened_sec) +'</div></div>'
     }
   }
   main.dataset.lastDay = lastDay
   if (!append) {
     main.innerHTML = html
-      ? '<div class="cap">✓ finished = trusted finish date · unknown = before reliable progress tracking · ~ = estimated from progress polls</div>' + html
+      ? '<div class="cap">✓ finished = trusted finish date · listening time and clock time are estimated from progress polls</div>' + html
       : '<p class="muted">no listening history yet</p>'
   } else {
     main.insertAdjacentHTML("beforeend", html)
@@ -237,6 +262,7 @@ document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
 let debounce
 qEl.oninput = () => { clearTimeout(debounce); debounce = setTimeout(render, 250) }
 sortEl.onchange = render
+loadJourneyStatus().catch(() => {})
 render()
 </script>
 </body>

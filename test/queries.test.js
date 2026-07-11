@@ -92,6 +92,8 @@ test("history marks pre-tracking exact finish markers as unknown", () => {
 
     expect(getSessions().sessions[0].confidence).toBe("exact")
     expect(getSessions().sessions[0].display_confidence).toBe("pre_tracking")
+    expect(getSessions({ hideUnknown: true }).sessions).toEqual([])
+    expect(getSessions({ hideUnknown: "1" }).sessions).toEqual([])
 })
 
 test("history keeps exact finish markers after tracking trusted", () => {
@@ -100,4 +102,5 @@ test("history keeps exact finish markers after tracking trusted", () => {
     recordFinishSession("FINISHED", "2026-07-02T10:00:00Z", 36000)
 
     expect(getSessions().sessions[0].display_confidence).toBe("exact")
+    expect(getSessions({ hideUnknown: true }).sessions).toHaveLength(1)
 })

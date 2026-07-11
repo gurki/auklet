@@ -139,9 +139,10 @@ export function getBooks({ q = null, list = null, sort = "author", limit = 200, 
     return { books, total: books.length, trust: { trackingStartedAt: trust.reportedTrustAfter } }
 }
 
-export function getSessions({ month = null, q = null, asin = null, limit = 200, offset = 0 } = {}) {
+export function getSessions({ month = null, q = null, asin = null, hideUnknown = false, limit = 200, offset = 0 } = {}) {
     const like = q ? `%${q}%` : null
     const trust = trustParams()
+    const hideUnknownFlag = ["1", "true", "yes", "on"].includes(String(hideUnknown).toLowerCase()) ? 1 : 0
     const sessions = getDb().prepare(`
         SELECT s.id, s.book_asin, s.started_at, s.ended_at, s.position_start_sec, s.position_end_sec,
                s.listened_sec, s.month, s.local_time, s.finished, s.confidence,
@@ -154,9 +155,10 @@ export function getSessions({ month = null, q = null, asin = null, limit = 200, 
         WHERE (@month IS NULL OR s.month = @month)
           AND (@asin IS NULL OR s.book_asin = @asin)
           AND (@like IS NULL OR b.title LIKE @like OR b.authors LIKE @like)
+          AND (@hideUnknown = 0 OR s.confidence != 'exact' OR s.ended_at > @trustAfter)
         ORDER BY s.ended_at DESC
         LIMIT @limit OFFSET @offset
-    `).all({ ...trust, month, asin, like, limit: Number(limit) || 200, offset: Number(offset) || 0 })
+    `).all({ ...trust, month, asin, like, hideUnknown: hideUnknownFlag, limit: Number(limit) || 200, offset: Number(offset) || 0 })
 
     return { sessions, trust: { trackingStartedAt: trust.reportedTrustAfter } }
 }
